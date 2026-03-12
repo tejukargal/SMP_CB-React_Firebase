@@ -168,8 +168,13 @@ function LedgerRow({ entry }: { entry: Entry }) {
           onClick={() => setDetailOpen(true)}
           className="border-b border-slate-100 bg-amber-50/60 hover:bg-amber-50 cursor-pointer transition-colors"
         >
-          <td colSpan={4} className="pb-2 pt-0 pl-4 pr-4 text-xs text-amber-700 italic leading-snug">
-            {entry.notes}
+          <td colSpan={4} className="pb-2 pt-0 pl-4 pr-4 overflow-hidden">
+            <div
+              className="truncate text-xs text-amber-700 italic"
+              title={entry.notes}
+            >
+              {entry.notes}
+            </div>
           </td>
         </tr>
       )}

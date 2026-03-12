@@ -48,7 +48,7 @@ export const EntryRow = memo(function EntryRow({ entry, compact = false, colorAm
         {/* Notes — flexible, truncated, non-compact only */}
         {!compact && (
           <td className="px-2 py-2.5 text-xs text-slate-400 whitespace-nowrap overflow-hidden max-w-0">
-            <span className="block truncate">{entry.notes || '—'}</span>
+            <span className="block truncate" title={entry.notes || undefined}>{entry.notes || '—'}</span>
           </td>
         )}
 
