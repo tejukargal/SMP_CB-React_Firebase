@@ -3,13 +3,16 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import type { Entry } from '@smp-cashbook/shared';
 import { formatDate } from './formatDate';
-import { formatCurrency } from './formatCurrency';
 import type { FilterState } from '@/components/entries/EntryFilters';
 
 // ── Page geometry (A4 landscape) ──────────────────────────────────────────────
 const MARGIN  = 10;
 const PAGE_W  = 297;
 const PAGE_CX = PAGE_W / 2;   // 148.5 mm — horizontal centre
+
+// ── Amount formatter for PDF/Excel (plain 2-decimal, no ₹ symbol) ────────────
+// Matches reference formatAmount(): n.toFixed(2) — keeps columns narrow
+const fmtAmt = (n: number) => n.toFixed(2);
 
 // ── Colour palette ────────────────────────────────────────────────────────────
 type RGB = [number, number, number];
@@ -26,8 +29,6 @@ const BASE = {
   lineColor:     C_BLACK,
   lineWidth:     0.1,
   minCellHeight: 8,
-  font:          'helvetica',
-  overflow:      'ellipsize' as const,
 };
 const HEAD_S = {
   fillColor: C_HEAD,
@@ -95,7 +96,7 @@ function groupByDate(entries: Entry[]): DateGroup[] {
 //
 // Columns (11):  Sl | R.Date | R.Chq | R.Amount | R.Heads | R.Notes |
 //                    P.Date | P.Chq | P.Amount | P.Heads | P.Notes
-// Widths (=277): 8 + 18 + 15 + 22 + 38 + 36 + 18 + 15 + 22 + 38 + 47
+// Widths (=277): 8 + 18 + 16 + 26 + 38 + 33 + 18 + 16 + 26 + 38 + 40
 // ─────────────────────────────────────────────────────────────────────────────
 export function exportListPDF(entries: Entry[], meta: ExportMeta) {
   const doc    = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -122,12 +123,12 @@ export function exportListPDF(entries: Entry[], meta: ExportMeta) {
         String(slNo++),
         r ? formatDate(r.date)       : '',
         r ? (r.chequeNo || '—')      : '',
-        r ? formatCurrency(r.amount) : '',
+        r ? fmtAmt(r.amount) : '',
         r ? r.headOfAccount          : '',
         r ? (r.notes || '')          : '',
         p ? formatDate(p.date)       : '',
         p ? (p.chequeNo || '—')      : '',
-        p ? formatCurrency(p.amount) : '',
+        p ? fmtAmt(p.amount) : '',
         p ? p.headOfAccount          : '',
         p ? (p.notes || '')          : '',
       ]);
@@ -137,8 +138,8 @@ export function exportListPDF(entries: Entry[], meta: ExportMeta) {
   // Grand totals row
   const totalR = entries.filter(e => e.type === 'Receipt').reduce((s, e) => s + e.amount, 0);
   const totalP = entries.filter(e => e.type === 'Payment').reduce((s, e) => s + e.amount, 0);
-  body.push(['', '', 'Total:', formatCurrency(totalR), '', '',
-             '',  'Total:', formatCurrency(totalP), '', '']);
+  body.push(['', '', 'Total:', fmtAmt(totalR), '', '',
+             '',  'Total:', fmtAmt(totalP), '', '']);
 
   autoTable(doc, {
     startY,
@@ -154,15 +155,15 @@ export function exportListPDF(entries: Entry[], meta: ExportMeta) {
     columnStyles: {
       0:  { cellWidth: 8,  halign: 'center' },
       1:  { cellWidth: 18 },
-      2:  { cellWidth: 15 },
-      3:  { cellWidth: 22, halign: 'right' },
+      2:  { cellWidth: 16 },
+      3:  { cellWidth: 26, halign: 'right' },
       4:  { cellWidth: 38 },
-      5:  { cellWidth: 36 },
+      5:  { cellWidth: 33 },
       6:  { cellWidth: 18 },
-      7:  { cellWidth: 15 },
-      8:  { cellWidth: 22, halign: 'right' },
+      7:  { cellWidth: 16 },
+      8:  { cellWidth: 26, halign: 'right' },
       9:  { cellWidth: 38 },
-      10: { cellWidth: 47 },
+      10: { cellWidth: 40 },
     },
     didParseCell: (data) => {
       if (data.section !== 'body') return;
@@ -194,7 +195,7 @@ export function exportListPDF(entries: Entry[], meta: ExportMeta) {
 //
 // Columns (8):  R.Date | R.Heads | R.Notes | R.Amount |
 //               P.Date | P.Heads | P.Notes | P.Amount
-// Widths (=277): 20 + 48 + 46 + 25 + 20 + 48 + 46 + 24
+// Widths (=277): 20 + 48 + 44 + 26 + 20 + 48 + 44 + 27
 // ─────────────────────────────────────────────────────────────────────────────
 export function exportDatePDF(entries: Entry[], meta: ExportMeta) {
   const doc    = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -217,7 +218,7 @@ export function exportDatePDF(entries: Entry[], meta: ExportMeta) {
     // By Opening Balance row
     if (gi > 0) {
       specialRows.add(body.length);
-      body.push(['', '', 'By Opening Bal', formatCurrency(runningBalance), '', '', '', '']);
+      body.push(['', '', 'By Opening Bal', fmtAmt(runningBalance), '', '', '', '']);
     }
 
     // Paired transaction rows
@@ -229,11 +230,11 @@ export function exportDatePDF(entries: Entry[], meta: ExportMeta) {
         r ? formatDate(r.date)       : '',
         r ? r.headOfAccount          : '',
         r ? (r.notes || '')          : '',
-        r ? formatCurrency(r.amount) : '',
+        r ? fmtAmt(r.amount) : '',
         p ? formatDate(p.date)       : '',
         p ? p.headOfAccount          : '',
         p ? (p.notes || '')          : '',
-        p ? formatCurrency(p.amount) : '',
+        p ? fmtAmt(p.amount) : '',
       ]);
     }
 
@@ -241,18 +242,18 @@ export function exportDatePDF(entries: Entry[], meta: ExportMeta) {
     const receiptTotal = dayR + (gi > 0 ? runningBalance : 0);
     totalRows.add(body.length);
     body.push([
-      '', '', 'Total', formatCurrency(receiptTotal),
-      formatDate(date), '', 'Total', formatCurrency(dayP),
+      '', '', 'Total', fmtAmt(receiptTotal),
+      formatDate(date), '', 'Total', fmtAmt(dayP),
     ]);
 
     runningBalance += dayR - dayP;
 
     // Closing Balance row
     specialRows.add(body.length);
-    body.push(['', '', '', '', '', '', 'Closing Bal', formatCurrency(runningBalance)]);
+    body.push(['', '', '', '', '', '', 'Closing Bal', fmtAmt(runningBalance)]);
 
     // Grand total row (payments + closing = receipt total)
-    body.push(['', '', '', '', '', '', '', formatCurrency(dayP + runningBalance)]);
+    body.push(['', '', '', '', '', '', '', fmtAmt(dayP + runningBalance)]);
 
     // Empty separator row
     body.push(['', '', '', '', '', '', '', '']);
@@ -269,12 +270,12 @@ export function exportDatePDF(entries: Entry[], meta: ExportMeta) {
     columnStyles: {
       0: { cellWidth: 20 },
       1: { cellWidth: 48 },
-      2: { cellWidth: 46 },
-      3: { cellWidth: 25, halign: 'right' },
+      2: { cellWidth: 44 },
+      3: { cellWidth: 26, halign: 'right' },
       4: { cellWidth: 20 },
       5: { cellWidth: 48 },
-      6: { cellWidth: 46 },
-      7: { cellWidth: 24, halign: 'right' },
+      6: { cellWidth: 44 },
+      7: { cellWidth: 27, halign: 'right' },
     },
     didParseCell: (data) => {
       if (data.section !== 'body') return;
