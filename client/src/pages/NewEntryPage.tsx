@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { cn } from '@/utils/cn';
 import { Input } from '@/components/ui/Input';
 import { DateInput } from '@/components/ui/DateInput';
@@ -115,8 +115,10 @@ const EMPTY_FORM: EntryFormData = {
 
 interface FormErrors {
   date?: string;
+  chequeNo?: string;
   amount?: string;
   headOfAccount?: string;
+  notes?: string;
 }
 
 const RECENT_DATE_COUNT = 5;
@@ -257,9 +259,11 @@ export function NewEntryPage() {
   const validate = (): boolean => {
     const e: FormErrors = {};
     if (!form.date) e.date = 'Date is required';
+    if (!form.chequeNo.trim()) e.chequeNo = 'Cheque No is required';
     if (!form.amount || isNaN(Number(form.amount)) || Number(form.amount) <= 0)
       e.amount = 'Amount must be a positive number';
     if (!form.headOfAccount.trim()) e.headOfAccount = 'Head of Account is required';
+    if (!form.notes.trim()) e.notes = 'Notes is required';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -289,13 +293,15 @@ export function NewEntryPage() {
     }
   };
 
+  const formRef = useRef<HTMLFormElement>(null);
+
   const tabs: EntryType[] = ['Receipt', 'Payment'];
 
   return (
     <div className="w-full pt-6 animate-fade-in space-y-6">
 
       {/* ── Entry form ── */}
-      <form onSubmit={handleSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
+      <form ref={formRef} onSubmit={handleSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
 
         {/* Receipt / Payment toggle */}
         <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1 gap-1">
@@ -334,9 +340,10 @@ export function NewEntryPage() {
               label="Cheque No"
               id="entry-cheque"
               type="text"
-              placeholder="Optional"
+              placeholder=""
               value={form.chequeNo}
               onChange={(e) => set('chequeNo', e.target.value)}
+              error={errors.chequeNo}
             />
           </div>
           <div className="sm:col-span-1">
@@ -376,16 +383,20 @@ export function NewEntryPage() {
             <Textarea
               label="Notes"
               id="entry-notes"
-              placeholder="Optional remarks..."
+              placeholder=""
               value={form.notes}
+              error={errors.notes}
               onChange={(e) => { set('notes', toProperCase(e.target.value)); setNotesOpen(true); }}
               onFocus={() => setNotesOpen(true)}
               onBlur={() => setNotesOpen(false)}
-              onKeyDown={(e) => { if (e.key === 'Escape') setNotesOpen(false); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') { setNotesOpen(false); return; }
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); formRef.current?.requestSubmit(); }
+              }}
             />
             {notesOpen && <SuggestDropdown suggestions={notesSuggestions} onSelect={selectNote} />}
           </div>
-          <div className="shrink-0 self-end flex flex-col gap-2">
+          <div className="shrink-0 self-end flex flex-col items-stretch gap-4">
             <Button
               type="submit"
               loading={submitting}
@@ -396,7 +407,7 @@ export function NewEntryPage() {
             <button
               type="button"
               onClick={() => { setForm({ ...EMPTY_FORM, type: form.type, date: todayISO() }); setErrors({}); }}
-              className="h-[28px] rounded-md border border-slate-200 bg-white px-4 text-xs font-medium text-slate-500 hover:border-slate-300 hover:text-slate-700 transition-colors"
+              className="h-[28px] rounded-md border border-dashed border-slate-300 bg-white px-4 text-xs font-medium text-slate-400 hover:border-slate-400 hover:text-slate-600 transition-colors"
             >
               Reset
             </button>
