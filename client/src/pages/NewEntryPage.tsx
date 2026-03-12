@@ -208,7 +208,12 @@ export function NewEntryPage() {
   }, [typeEntries, form.headOfAccount]);
 
   const getMostRecentNote = useCallback(
-    (head: string) => typeEntries.find((e) => e.headOfAccount === head)?.notes ?? '',
+    (head: string) => {
+      const match = typeEntries
+        .filter((e) => e.headOfAccount === head && e.notes)
+        .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))[0];
+      return match?.notes ?? '';
+    },
     [typeEntries]
   );
 
