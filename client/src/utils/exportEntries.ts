@@ -96,7 +96,7 @@ function groupByDate(entries: Entry[]): DateGroup[] {
 //
 // Columns (11):  Sl | R.Date | R.Chq | R.Amount | R.Heads | R.Notes |
 //                    P.Date | P.Chq | P.Amount | P.Heads | P.Notes
-// Widths (=277): 8 + 18 + 16 + 26 + 38 + 33 + 18 + 16 + 26 + 38 + 40
+// Widths (=277): 8 + 18 + 16 + 22 + 30 + 45 + 18 + 16 + 22 + 30 + 52
 // ─────────────────────────────────────────────────────────────────────────────
 export function exportListPDF(entries: Entry[], meta: ExportMeta) {
   const doc    = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -156,14 +156,14 @@ export function exportListPDF(entries: Entry[], meta: ExportMeta) {
       0:  { cellWidth: 8,  halign: 'center' },
       1:  { cellWidth: 18 },
       2:  { cellWidth: 16 },
-      3:  { cellWidth: 26, halign: 'right' },
-      4:  { cellWidth: 38 },
-      5:  { cellWidth: 33 },
+      3:  { cellWidth: 22, halign: 'right' },
+      4:  { cellWidth: 30 },
+      5:  { cellWidth: 45, fontSize: 6, cellPadding: { top: 1, bottom: 1, left: 2, right: 2 }, overflow: 'linebreak' as const },
       6:  { cellWidth: 18 },
       7:  { cellWidth: 16 },
-      8:  { cellWidth: 26, halign: 'right' },
-      9:  { cellWidth: 38 },
-      10: { cellWidth: 40 },
+      8:  { cellWidth: 22, halign: 'right' },
+      9:  { cellWidth: 30 },
+      10: { cellWidth: 52, fontSize: 6, cellPadding: { top: 1, bottom: 1, left: 2, right: 2 }, overflow: 'linebreak' as const },
     },
     didParseCell: (data) => {
       if (data.section !== 'body') return;
@@ -195,7 +195,7 @@ export function exportListPDF(entries: Entry[], meta: ExportMeta) {
 //
 // Columns (8):  R.Date | R.Heads | R.Notes | R.Amount |
 //               P.Date | P.Heads | P.Notes | P.Amount
-// Widths (=277): 20 + 48 + 44 + 26 + 20 + 48 + 44 + 27
+// Widths (=277): 20 + 38 + 58 + 22 + 20 + 38 + 58 + 23
 // ─────────────────────────────────────────────────────────────────────────────
 export function exportDatePDF(entries: Entry[], meta: ExportMeta) {
   const doc    = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -269,13 +269,13 @@ export function exportDatePDF(entries: Entry[], meta: ExportMeta) {
     headStyles: HEAD_S,
     columnStyles: {
       0: { cellWidth: 20 },
-      1: { cellWidth: 48 },
-      2: { cellWidth: 44 },
-      3: { cellWidth: 26, halign: 'right' },
+      1: { cellWidth: 38 },
+      2: { cellWidth: 58, fontSize: 6, cellPadding: { top: 1, bottom: 1, left: 2, right: 2 }, overflow: 'linebreak' as const },
+      3: { cellWidth: 22, halign: 'right' },
       4: { cellWidth: 20 },
-      5: { cellWidth: 48 },
-      6: { cellWidth: 44 },
-      7: { cellWidth: 27, halign: 'right' },
+      5: { cellWidth: 38 },
+      6: { cellWidth: 58, fontSize: 6, cellPadding: { top: 1, bottom: 1, left: 2, right: 2 }, overflow: 'linebreak' as const },
+      7: { cellWidth: 23, halign: 'right' },
     },
     didParseCell: (data) => {
       if (data.section !== 'body') return;
