@@ -306,18 +306,49 @@ function CompareSection({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      {/* Head label */}
       <div className="flex items-center gap-2 px-1">
         <div className="h-1.5 w-1.5 rounded-full bg-slate-400 shrink-0" />
         <span className="text-xs font-semibold text-slate-600">{head}</span>
       </div>
-
-      {/* Panels + aligned totals */}
       <div className="grid grid-cols-2 gap-x-4">
         <LedgerTransactionPanel entries={receipts} type="Receipt" sticky={false} />
         <LedgerTransactionPanel entries={payments} type="Payment" sticky={false} />
         <TotalsCell entries={receipts} type="Receipt" />
         <TotalsCell entries={payments} type="Payment" />
+      </div>
+    </div>
+  );
+}
+
+// ── Paired section: one receipt-only head alongside one payment-only head ──────
+
+function ComparePairedSection({
+  receiptHead, receiptEntries,
+  paymentHead, paymentEntries,
+}: {
+  receiptHead: string; receiptEntries: Entry[];
+  paymentHead: string; paymentEntries: Entry[];
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-x-4">
+      {/* Left: receipt ledger label + panel + total */}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2 px-1">
+          <div className="h-1.5 w-1.5 rounded-full bg-green-400 shrink-0" />
+          <span className="text-xs font-semibold text-slate-600">{receiptHead}</span>
+        </div>
+        <LedgerTransactionPanel entries={receiptEntries} type="Receipt" sticky={false} />
+        <TotalsCell entries={receiptEntries} type="Receipt" />
+      </div>
+
+      {/* Right: payment ledger label + panel + total */}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2 px-1">
+          <div className="h-1.5 w-1.5 rounded-full bg-red-400 shrink-0" />
+          <span className="text-xs font-semibold text-slate-600">{paymentHead}</span>
+        </div>
+        <LedgerTransactionPanel entries={paymentEntries} type="Payment" sticky={false} />
+        <TotalsCell entries={paymentEntries} type="Payment" />
       </div>
     </div>
   );
@@ -331,6 +362,24 @@ function LedgerCompare({
   heads: string[]; entries: Entry[]; onBack: () => void;
 }) {
   const label = `Comparing ${heads.length} ledger${heads.length > 1 ? 's' : ''}`;
+
+  // Categorise each selected head
+  const headData = heads.map((head) => ({
+    head,
+    receipts: entries.filter((e) => e.type === 'Receipt' && e.headOfAccount === head),
+    payments: entries.filter((e) => e.type === 'Payment' && e.headOfAccount === head),
+  }));
+
+  const receiptOnly = headData.filter((h) => h.receipts.length > 0 && h.payments.length === 0);
+  const paymentOnly = headData.filter((h) => h.payments.length > 0 && h.receipts.length === 0);
+  const mixed       = headData.filter((h) => h.receipts.length > 0 && h.payments.length > 0);
+  const empty       = headData.filter((h) => h.receipts.length === 0 && h.payments.length === 0);
+
+  // Pair receipt-only heads with payment-only heads (1-to-1, FIFO)
+  const pairedCount = Math.min(receiptOnly.length, paymentOnly.length);
+  const pairs        = Array.from({ length: pairedCount }, (_, i) => ({ r: receiptOnly[i], p: paymentOnly[i] }));
+  const unpairedR    = receiptOnly.slice(pairedCount);
+  const unpairedP    = paymentOnly.slice(pairedCount);
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -355,14 +404,34 @@ function LedgerCompare({
         );
       })()}
 
-      {/* One section per selected ledger head */}
-      {heads.map((head) => {
-        const receipts = entries.filter((e) => e.type === 'Receipt' && e.headOfAccount === head);
-        const payments = entries.filter((e) => e.type === 'Payment' && e.headOfAccount === head);
-        return (
-          <CompareSection key={head} head={head} receipts={receipts} payments={payments} />
-        );
-      })}
+      {/* Paired: one receipt-only + one payment-only side by side */}
+      {pairs.map(({ r, p }) => (
+        <ComparePairedSection
+          key={`${r.head}+${p.head}`}
+          receiptHead={r.head} receiptEntries={r.receipts}
+          paymentHead={p.head} paymentEntries={p.payments}
+        />
+      ))}
+
+      {/* Unpaired receipt-only heads (no counterpart payment-only to pair with) */}
+      {unpairedR.map(({ head, receipts, payments }) => (
+        <CompareSection key={head} head={head} receipts={receipts} payments={payments} />
+      ))}
+
+      {/* Unpaired payment-only heads */}
+      {unpairedP.map(({ head, receipts, payments }) => (
+        <CompareSection key={head} head={head} receipts={receipts} payments={payments} />
+      ))}
+
+      {/* Mixed heads (have both receipts and payments) */}
+      {mixed.map(({ head, receipts, payments }) => (
+        <CompareSection key={head} head={head} receipts={receipts} payments={payments} />
+      ))}
+
+      {/* Heads with no entries at all */}
+      {empty.map(({ head, receipts, payments }) => (
+        <CompareSection key={head} head={head} receipts={receipts} payments={payments} />
+      ))}
     </div>
   );
 }
