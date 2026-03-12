@@ -294,36 +294,63 @@ function LedgerDetail({
   const { settings } = useSettings();
   const { activeFinancialYear: fy, activeCashBookType: cbt } = settings;
 
+  const totalR  = receipts.reduce((s, e) => s + e.amount, 0);
+  const totalP  = payments.reduce((s, e) => s + e.amount, 0);
+  const balance = totalR - totalP;
+
   const exportActions = (
     <>
-      <button
-        type="button"
-        onClick={() => exportLedgerPDF(head, receipts, payments, fy, cbt)}
-        title="Export as PDF"
-        className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
-          px-2.5 py-1.5 text-xs font-medium text-slate-600
-          hover:border-red-300 hover:text-red-600 transition-colors"
-      >
-        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-        </svg>
-        PDF
-      </button>
-      <button
-        type="button"
-        onClick={() => exportLedgerExcel(head, receipts, payments, fy, cbt)}
-        title="Export as Excel"
-        className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
-          px-2.5 py-1.5 text-xs font-medium text-slate-600
-          hover:border-green-300 hover:text-green-600 transition-colors"
-      >
-        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z" />
-        </svg>
-        Excel
-      </button>
+      {/* Totals summary — right-aligned chips */}
+      <div className="flex items-center gap-2 ml-auto">
+        <div className="flex items-center gap-1.5 rounded-md border border-green-200 bg-green-50 px-2.5 py-1.5">
+          <span className="text-xs text-green-600">Receipts</span>
+          <span className="text-xs font-semibold text-green-700">{formatCurrency(totalR)}</span>
+        </div>
+        <div className="flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5">
+          <span className="text-xs text-red-600">Payments</span>
+          <span className="text-xs font-semibold text-red-700">{formatCurrency(totalP)}</span>
+        </div>
+        <div className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 ${
+          balance >= 0 ? 'border-blue-200 bg-blue-50' : 'border-orange-200 bg-orange-50'
+        }`}>
+          <span className={`text-xs ${balance >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>Balance</span>
+          <span className={`text-xs font-semibold ${balance >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
+            {formatCurrency(Math.abs(balance))}{balance < 0 ? ' (Dr)' : ''}
+          </span>
+        </div>
+
+        {/* Separator */}
+        <div className="w-px h-5 bg-slate-200 mx-1" />
+
+        <button
+          type="button"
+          onClick={() => exportLedgerPDF(head, receipts, payments, fy, cbt)}
+          title="Export as PDF"
+          className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
+            px-2.5 py-1.5 text-xs font-medium text-slate-600
+            hover:border-red-300 hover:text-red-600 transition-colors"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          </svg>
+          PDF
+        </button>
+        <button
+          type="button"
+          onClick={() => exportLedgerExcel(head, receipts, payments, fy, cbt)}
+          title="Export as Excel"
+          className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
+            px-2.5 py-1.5 text-xs font-medium text-slate-600
+            hover:border-green-300 hover:text-green-600 transition-colors"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z" />
+          </svg>
+          Excel
+        </button>
+      </div>
     </>
   );
 
