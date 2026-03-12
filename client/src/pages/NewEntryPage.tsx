@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { cn } from '@/utils/cn';
 import { Input } from '@/components/ui/Input';
 import { DateInput } from '@/components/ui/DateInput';
@@ -80,6 +80,35 @@ function RecentSplitPanel({
   );
 }
 
+// ── Autocomplete dropdown ──────────────────────────────────────────────────────
+
+function SuggestDropdown({
+  suggestions,
+  onSelect,
+}: {
+  suggestions: string[];
+  onSelect: (v: string) => void;
+}) {
+  if (suggestions.length === 0) return null;
+  return (
+    <ul className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-slate-200 bg-white shadow-lg overflow-hidden">
+      {suggestions.map((s) => (
+        <li key={s}>
+          <button
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); onSelect(s); }}
+            className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 truncate transition-colors"
+          >
+            {s}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const EMPTY_FORM: EntryFormData = {
   date: todayISO(),
   chequeNo: '',
@@ -120,6 +149,74 @@ export function NewEntryPage() {
   const recentPayments  = useMemo(() => recentEntries.filter((e) => e.type === 'Payment'), [recentEntries]);
   const totalR = useMemo(() => recentReceipts.reduce((s, e) => s + e.amount, 0), [recentReceipts]);
   const totalP = useMemo(() => recentPayments.reduce((s, e) => s + e.amount, 0), [recentPayments]);
+
+  // ── Autocomplete data ──────────────────────────────────────────────────────
+
+  // All same-type entries sorted newest first (source for suggestions)
+  const typeEntries = useMemo(
+    () => [...entries]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .filter((e) => e.type === form.type),
+    [entries, form.type]
+  );
+
+  // Top 2 unique heads matching the current HoA input
+  const hoaSuggestions = useMemo(() => {
+    const q = form.headOfAccount.trim().toLowerCase();
+    if (!q) return [];
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const e of typeEntries) {
+      if (!seen.has(e.headOfAccount) && e.headOfAccount.toLowerCase().includes(q)) {
+        seen.add(e.headOfAccount);
+        result.push(e.headOfAccount);
+        if (result.length === 2) break;
+      }
+    }
+    return result;
+  }, [typeEntries, form.headOfAccount]);
+
+  // Most recent note for a given head + current type
+  const getMostRecentNote = useCallback(
+    (head: string) => typeEntries.find((e) => e.headOfAccount === head)?.notes ?? '',
+    [typeEntries]
+  );
+
+  // Top 2 unique notes matching the current notes input (head-filtered if HoA is set)
+  const notesSuggestions = useMemo(() => {
+    const q = form.notes.trim().toLowerCase();
+    if (!q) return [];
+    const pool = form.headOfAccount.trim()
+      ? typeEntries.filter((e) => e.headOfAccount === form.headOfAccount.trim())
+      : typeEntries;
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const e of pool) {
+      if (e.notes && !seen.has(e.notes) && e.notes.toLowerCase().includes(q)) {
+        seen.add(e.notes);
+        result.push(e.notes);
+        if (result.length === 2) break;
+      }
+    }
+    return result;
+  }, [typeEntries, form.notes, form.headOfAccount]);
+
+  // Dropdown open state (controlled by focus; onMouseDown on items prevents blur)
+  const [hoaOpen, setHoaOpen]     = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+
+  const selectHoa = (head: string) => {
+    set('headOfAccount', head);
+    set('notes', getMostRecentNote(head));
+    setHoaOpen(false);
+  };
+
+  const selectNote = (note: string) => {
+    set('notes', note);
+    setNotesOpen(false);
+  };
+
+  // ──────────────────────────────────────────────────────────────────────────
 
   const set = (field: keyof EntryFormData, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
@@ -222,29 +319,42 @@ export function NewEntryPage() {
               error={errors.amount}
             />
           </div>
-          <div className="sm:col-span-1">
+          <div className="sm:col-span-1 relative">
             <Input
               label="Head of Account"
               id="entry-hoa"
               type="text"
               placeholder="E.g. Tuition Fee"
               value={form.headOfAccount}
-              onChange={(e) => set('headOfAccount', toProperCase(e.target.value))}
+              onChange={(e) => { set('headOfAccount', toProperCase(e.target.value)); setHoaOpen(true); }}
+              onFocus={() => setHoaOpen(true)}
+              onBlur={() => setHoaOpen(false)}
+              onKeyDown={(e) => { if (e.key === 'Escape') setHoaOpen(false); }}
               error={errors.headOfAccount}
+              autoComplete="off"
             />
+            {hoaOpen && (
+              <SuggestDropdown suggestions={hoaSuggestions} onSelect={selectHoa} />
+            )}
           </div>
         </div>
 
         {/* Notes + Submit */}
         <div className="flex gap-4 items-end">
-          <div className="flex-1">
+          <div className="flex-1 relative">
             <Textarea
               label="Notes"
               id="entry-notes"
               placeholder="Optional remarks..."
               value={form.notes}
-              onChange={(e) => set('notes', toProperCase(e.target.value))}
+              onChange={(e) => { set('notes', toProperCase(e.target.value)); setNotesOpen(true); }}
+              onFocus={() => setNotesOpen(true)}
+              onBlur={() => setNotesOpen(false)}
+              onKeyDown={(e) => { if (e.key === 'Escape') setNotesOpen(false); }}
             />
+            {notesOpen && (
+              <SuggestDropdown suggestions={notesSuggestions} onSelect={selectNote} />
+            )}
           </div>
           <Button
             type="submit"
