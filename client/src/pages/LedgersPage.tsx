@@ -5,6 +5,7 @@ import { EntryDetailModal } from '@/components/entries/EntryDetailModal';
 import { EntrySkeleton } from '@/components/entries/EntrySkeleton';
 import { formatCurrency } from '@/utils/formatCurrency';
 import { formatDate } from '@/utils/formatDate';
+import { exportLedgerPDF, exportLedgerExcel } from '@/utils/exportEntries';
 import type { Entry } from '@smp-cashbook/shared';
 
 // Sticky offsets:
@@ -263,7 +264,7 @@ function TotalsCell({ entries, type }: { entries: Entry[]; type: 'Receipt' | 'Pa
 
 // ── Shared sticky back bar ────────────────────────────────────────────────────
 
-function BackBar({ label, onBack }: { label: string; onBack: () => void }) {
+function BackBar({ label, onBack, actions }: { label: string; onBack: () => void; actions?: React.ReactNode }) {
   return (
     <div className="sticky top-0 z-20 -mx-6 px-6 py-3 bg-slate-50 border-b border-slate-200 mb-4 flex items-center gap-3">
       <button
@@ -277,7 +278,8 @@ function BackBar({ label, onBack }: { label: string; onBack: () => void }) {
         </svg>
         Back to Ledgers
       </button>
-      <span className="text-sm font-semibold text-slate-700 truncate">{label}</span>
+      <span className="flex-1 text-sm font-semibold text-slate-700 truncate">{label}</span>
+      {actions}
     </div>
   );
 }
@@ -289,9 +291,45 @@ function LedgerDetail({
 }: {
   head: string; receipts: Entry[]; payments: Entry[]; onBack: () => void;
 }) {
+  const { settings } = useSettings();
+  const { activeFinancialYear: fy, activeCashBookType: cbt } = settings;
+
+  const exportActions = (
+    <>
+      <button
+        type="button"
+        onClick={() => exportLedgerPDF(head, receipts, payments, fy, cbt)}
+        title="Export as PDF"
+        className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
+          px-2.5 py-1.5 text-xs font-medium text-slate-600
+          hover:border-red-300 hover:text-red-600 transition-colors"
+      >
+        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+        PDF
+      </button>
+      <button
+        type="button"
+        onClick={() => exportLedgerExcel(head, receipts, payments, fy, cbt)}
+        title="Export as Excel"
+        className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
+          px-2.5 py-1.5 text-xs font-medium text-slate-600
+          hover:border-green-300 hover:text-green-600 transition-colors"
+      >
+        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z" />
+        </svg>
+        Excel
+      </button>
+    </>
+  );
+
   return (
     <div className="flex flex-col animate-fade-in">
-      <BackBar label={head} onBack={onBack} />
+      <BackBar label={head} onBack={onBack} actions={exportActions} />
       <div className="grid grid-cols-2 gap-x-4">
         <LedgerTransactionPanel entries={receipts} type="Receipt" sticky />
         <LedgerTransactionPanel entries={payments} type="Payment" sticky />

@@ -405,3 +405,154 @@ export function exportDateExcel(entries: Entry[], meta: ExportMeta) {
   XLSX.utils.book_append_sheet(wb, ws, 'CB Report 2');
   XLSX.writeFile(wb, `smp-cashbook-${financialYear.replace('/', '-')}-date.xlsx`);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LEDGER TRANSACTIONS PDF
+//
+// Side-by-side layout (ledger name is the title, no Heads column needed):
+//   R.Date | R.Chq | R.Amount | R.Notes | P.Date | P.Chq | P.Amount | P.Notes
+// Widths (=277): 20 + 16 + 24 + 78 + 20 + 16 + 24 + 79
+//
+// Rows paired by index. Totals printed as text below the table.
+// ─────────────────────────────────────────────────────────────────────────────
+const NOTES_COL_STYLE = {
+  fontSize:    6,
+  cellPadding: { top: 1, bottom: 1, left: 2, right: 2 },
+  overflow:    'linebreak' as const,
+};
+
+export function exportLedgerPDF(
+  head: string,
+  receipts: Entry[],
+  payments: Entry[],
+  financialYear: string,
+  cashBookType: string,
+) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+  // Header — matches reference ledger PDF style
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.text(`Ledger: ${head}`, PAGE_CX, 13, { align: 'center' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text(
+    `SMP Cash Book  ·  ${cashBookType}  ·  FY: ${financialYear}  ·  Generated: ${new Date().toLocaleDateString('en-IN')}`,
+    PAGE_CX, 19, { align: 'center' },
+  );
+  doc.setTextColor(0, 0, 0);
+
+  // Paired rows (receipts left, payments right, indexed)
+  const sorted = (arr: Entry[]) =>
+    [...arr].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
+  const sortedR = sorted(receipts);
+  const sortedP = sorted(payments);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const body: any[] = [];
+  const maxRows = Math.max(sortedR.length, sortedP.length, 1);
+  for (let i = 0; i < maxRows; i++) {
+    const r = sortedR[i];
+    const p = sortedP[i];
+    body.push([
+      r ? formatDate(r.date)    : '',
+      r ? (r.chequeNo || '—')   : '',
+      r ? fmtAmt(r.amount)      : '',
+      r ? (r.notes || '')       : '',
+      p ? formatDate(p.date)    : '',
+      p ? (p.chequeNo || '—')   : '',
+      p ? fmtAmt(p.amount)      : '',
+      p ? (p.notes || '')       : '',
+    ]);
+  }
+
+  autoTable(doc, {
+    startY:     24,
+    margin:     { left: MARGIN, right: MARGIN },
+    tableWidth: 277,
+    head: [['R.Date', 'R.Chq', 'R.Amount', 'R.Notes', 'P.Date', 'P.Chq', 'P.Amount', 'P.Notes']],
+    body,
+    styles:     BASE,
+    headStyles: HEAD_S,
+    columnStyles: {
+      0: { cellWidth: 20 },
+      1: { cellWidth: 16 },
+      2: { cellWidth: 24, halign: 'right' },
+      3: { cellWidth: 78, ...NOTES_COL_STYLE },
+      4: { cellWidth: 20 },
+      5: { cellWidth: 16 },
+      6: { cellWidth: 24, halign: 'right' },
+      7: { cellWidth: 79, ...NOTES_COL_STYLE },
+    },
+    didParseCell: (data) => {
+      if (data.section === 'body') data.cell.styles.fillColor = C_WHITE;
+    },
+  });
+
+  // Totals text below table — matches reference style
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const finalY = (doc as any).lastAutoTable.finalY + 7;
+  const totalR = receipts.reduce((s, e) => s + e.amount, 0);
+  const totalP = payments.reduce((s, e) => s + e.amount, 0);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Receipts Total: ${fmtAmt(totalR)}`, MARGIN, finalY);
+  doc.text(`Payments Total: ${fmtAmt(totalP)}`, MARGIN, finalY + 6);
+  doc.text(`Net (R − P): ${fmtAmt(totalR - totalP)}`, MARGIN, finalY + 12);
+
+  const safeName = head.replace(/[^a-z0-9]/gi, '_');
+  doc.save(`ledger-${safeName}-${financialYear.replace('/', '-')}.pdf`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LEDGER TRANSACTIONS EXCEL
+// ─────────────────────────────────────────────────────────────────────────────
+export function exportLedgerExcel(
+  head: string,
+  receipts: Entry[],
+  payments: Entry[],
+  financialYear: string,
+  cashBookType: string,
+) {
+  const sorted = (arr: Entry[]) =>
+    [...arr].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
+  const sortedR = sorted(receipts);
+  const sortedP = sorted(payments);
+
+  const rows: (string | number)[][] = [
+    [`Ledger: ${head}`],
+    [`SMP Cash Book — ${cashBookType}  |  FY: ${financialYear}`],
+    [],
+    ['R.Date', 'R.Chq', 'R.Amount', 'R.Notes', 'P.Date', 'P.Chq', 'P.Amount', 'P.Notes'],
+  ];
+
+  const maxRows = Math.max(sortedR.length, sortedP.length, 1);
+  for (let i = 0; i < maxRows; i++) {
+    const r = sortedR[i];
+    const p = sortedP[i];
+    rows.push([
+      r ? formatDate(r.date) : '', r ? (r.chequeNo || '') : '',
+      r ? r.amount : '',           r ? (r.notes || '') : '',
+      p ? formatDate(p.date) : '', p ? (p.chequeNo || '') : '',
+      p ? p.amount : '',           p ? (p.notes || '') : '',
+    ]);
+  }
+
+  const totalR = receipts.reduce((s, e) => s + e.amount, 0);
+  const totalP = payments.reduce((s, e) => s + e.amount, 0);
+  rows.push([]);
+  rows.push(['Receipts Total:', '', totalR, '', 'Payments Total:', '', totalP, '']);
+  rows.push(['Net (R - P):', '', totalR - totalP, '', '', '', '', '']);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [
+    { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 40 },
+    { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 40 },
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Ledger');
+  const safeName = head.replace(/[^a-z0-9]/gi, '_');
+  XLSX.writeFile(wb, `ledger-${safeName}-${financialYear.replace('/', '-')}.xlsx`);
+}
