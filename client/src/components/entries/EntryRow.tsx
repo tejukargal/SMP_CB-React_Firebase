@@ -7,9 +7,10 @@ import type { Entry } from '@smp-cashbook/shared';
 interface EntryRowProps {
   entry: Entry;
   compact?: boolean;
+  colorAmount?: boolean;
 }
 
-export const EntryRow = memo(function EntryRow({ entry, compact = false }: EntryRowProps) {
+export const EntryRow = memo(function EntryRow({ entry, compact = false, colorAmount = true }: EntryRowProps) {
   const [detailOpen, setDetailOpen] = useState(false);
 
   return (
@@ -53,7 +54,7 @@ export const EntryRow = memo(function EntryRow({ entry, compact = false }: Entry
 
         {/* Amount — fixed 120px, right-aligned, no wrap */}
         <td className="w-[120px] min-w-[120px] pl-2 pr-4 py-2.5 text-sm font-medium text-right whitespace-nowrap">
-          <span className={entry.type === 'Receipt' ? 'text-green-700' : 'text-red-700'}>
+          <span className={colorAmount ? (entry.type === 'Receipt' ? 'text-green-700' : 'text-red-700') : 'text-slate-900'}>
             {formatCurrency(entry.amount)}
           </span>
         </td>

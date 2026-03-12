@@ -248,7 +248,7 @@ function DateGroupPanel({
             <CompactTableHead />
             <tbody>
               {entries.map((entry) => (
-                <EntryRow key={entry.id} entry={entry} compact />
+                <EntryRow key={entry.id} entry={entry} compact colorAmount={false} />
               ))}
             </tbody>
           </table>
@@ -348,7 +348,7 @@ const DateGroupedView = memo(function DateGroupedView({
 
             {/* Row 3: receipt totals | payment totals — flush with panels above */}
             <div className="rounded-b-lg border-x border-b border-green-200 overflow-hidden">
-              <div className="border-t-2 border-slate-200 bg-slate-50 flex items-center justify-between px-3 py-1.5">
+              <div className="border-t-2 border-green-300 bg-slate-50 flex items-center justify-between px-3 py-1.5">
                 <span className="text-xs font-medium text-slate-500">
                   Total ({receipts.length} {receipts.length === 1 ? 'entry' : 'entries'})
                 </span>
@@ -359,7 +359,7 @@ const DateGroupedView = memo(function DateGroupedView({
             </div>
 
             <div className="rounded-b-lg border-x border-b border-red-200 overflow-hidden">
-              <div className="border-t-2 border-slate-200 bg-slate-50">
+              <div className="border-t-2 border-red-300 bg-slate-50">
                 <div className="flex items-center justify-between px-3 py-1.5">
                   <span className="text-xs font-medium text-slate-500">
                     Total ({payments.length} {payments.length === 1 ? 'entry' : 'entries'})
