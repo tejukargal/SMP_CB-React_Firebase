@@ -7,165 +7,174 @@ import { formatCurrency } from './formatCurrency';
 import type { FilterState } from '@/components/entries/EntryFilters';
 
 // ── Page geometry (A4 landscape) ──────────────────────────────────────────────
-const MARGIN    = 10;         // mm
-const PAGE_W    = 297;        // mm
-const CONTENT_W = PAGE_W - 2 * MARGIN; // 277 mm
+const MARGIN  = 10;
+const PAGE_W  = 297;
+const PAGE_CX = PAGE_W / 2;   // 148.5 mm — horizontal centre
 
-// ── Palette ───────────────────────────────────────────────────────────────────
+// ── Colour palette ────────────────────────────────────────────────────────────
 type RGB = [number, number, number];
-const C_HEAD_BG:  RGB = [51,  65,  85 ];   // slate-700
-const C_WHITE:    RGB = [255, 255, 255];
-const C_ALT:      RGB = [248, 250, 252];   // slate-50
-const C_FOOT_BG:  RGB = [241, 245, 249];   // slate-100
-const C_FOOT_FG:  RGB = [15,  23,  42 ];   // slate-900
-const C_BORDER:   RGB = [203, 213, 225];   // slate-300
-const C_GREEN:    RGB = [21,  128, 61 ];   // green-700
-const C_RED:      RGB = [185, 28,  28 ];   // red-700
-const C_BLUE:     RGB = [29,  78,  216];   // blue-700
-const C_ORANGE:   RGB = [154, 52,  18 ];   // orange-700
-const C_DATE_BG:  RGB = [239, 246, 255];   // blue-50
-const C_R_BG:     RGB = [240, 253, 244];   // green-50
-const C_P_BG:     RGB = [255, 241, 242];   // red-50
-const C_CB_BG:    RGB = [255, 247, 237];   // orange-50
+const C_WHITE:  RGB = [255, 255, 255];
+const C_HEAD:   RGB = [100, 100, 100];  // grey header (matches reference)
+const C_TOTAL:  RGB = [229, 231, 235];  // grey-200 for total rows
+const C_DATE:   RGB = [219, 234, 254];  // blue-100 for date separator rows
+const C_BLACK:  RGB = [0,   0,   0  ];  // border colour
 
-// ── Shared table styles ───────────────────────────────────────────────────────
+// ── Shared base style (matches reference: 8pt, 2.5 padding, black borders) ───
 const BASE = {
-  fontSize:    7.5,
-  cellPadding: { top: 1.5, bottom: 1.5, left: 2, right: 2 },
-  overflow:    'ellipsize' as const,
-  font:        'helvetica',
-  lineWidth:   0.1,
-  lineColor:   C_BORDER,
+  fontSize:      8,
+  cellPadding:   2.5,
+  lineColor:     C_BLACK,
+  lineWidth:     0.1,
+  minCellHeight: 8,
+  font:          'helvetica',
+  overflow:      'ellipsize' as const,
 };
 const HEAD_S = {
-  fillColor:   C_HEAD_BG,
-  textColor:   C_WHITE,
-  fontStyle:   'bold' as const,
-  fontSize:    7.5,
-  cellPadding: { top: 2, bottom: 2, left: 2, right: 2 },
-};
-const FOOT_S = {
-  fillColor: C_FOOT_BG,
-  textColor: C_FOOT_FG,
-  fontStyle: 'bold' as const,
-  fontSize:  7.5,
+  fillColor: C_HEAD,
+  textColor: C_WHITE,
+  fontStyle: 'bold'   as const,
+  halign:    'center' as const,
+  fontSize:  9,
 };
 
-// ── Meta ──────────────────────────────────────────────────────────────────────
+// ── Export meta ───────────────────────────────────────────────────────────────
 export interface ExportMeta {
   financialYear: string;
   cashBookType:  string;
   filters:       FilterState;
 }
 
-// ── Two-line page header ──────────────────────────────────────────────────────
-function addHeader(doc: jsPDF, meta: ExportMeta) {
+// ── 3-line centred header (returns startY for the table) ─────────────────────
+function addHeader(doc: jsPDF, meta: ExportMeta): number {
   const { financialYear, cashBookType, filters } = meta;
 
-  // Line 1 — bold title left, FY·type right
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.text('SMP Cash Book', MARGIN, 8);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`${financialYear}  ·  ${cashBookType}`, PAGE_W - MARGIN, 8, { align: 'right' });
+  doc.setFontSize(14);
+  doc.text('Cash Book Report', PAGE_CX, 13, { align: 'center' });
 
-  // Line 2 — filter summary left, generated date right
-  doc.setFontSize(7);
-  doc.setTextColor(100, 116, 139); // slate-500
-  const parts: string[] = [];
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`SMP Cash Book  ·  ${cashBookType}`, PAGE_CX, 20, { align: 'center' });
+
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  const parts: string[] = [`FY: ${financialYear}`];
   if (filters.dateFrom || filters.dateTo)
-    parts.push(`Period: ${filters.dateFrom ? formatDate(filters.dateFrom) : '—'} to ${filters.dateTo ? formatDate(filters.dateTo) : '—'}`);
+    parts.push(`Period: ${filters.dateFrom ? formatDate(filters.dateFrom) : '—'} – ${filters.dateTo ? formatDate(filters.dateTo) : '—'}`);
   if (filters.typeFilter !== 'All') parts.push(`Type: ${filters.typeFilter}s`);
   if (filters.headOfAccount) parts.push(`Head: ${filters.headOfAccount}`);
   if (filters.search.trim()) parts.push(`Search: "${filters.search}"`);
-  if (parts.length === 0) parts.push('All entries');
-  doc.text(parts.join('   ·   '), MARGIN, 13);
-  doc.text(`Generated: ${new Date().toLocaleDateString('en-IN')}`, PAGE_W - MARGIN, 13, { align: 'right' });
+  doc.text(parts.join('   ·   '), PAGE_CX, 26, { align: 'center' });
+  doc.text(`Generated: ${new Date().toLocaleDateString('en-IN')}`, PAGE_W - MARGIN, 26, { align: 'right' });
   doc.setTextColor(0, 0, 0);
+
+  return 32;
 }
 
-// ── Date-group computation (same logic as DateGroupedView) ────────────────────
-interface DateGroup {
-  date:           string;
-  dateEntries:    Entry[];
-  openingBalance: number;
-  closingBalance: number;
-  dayR:           number;
-  dayP:           number;
-}
+// ── Group entries by date (sorted oldest-first) ───────────────────────────────
+interface DateGroup { date: string; receipts: Entry[]; payments: Entry[]; }
 
-function computeDateGroups(entries: Entry[]): DateGroup[] {
+function groupByDate(entries: Entry[]): DateGroup[] {
   const sorted = [...entries].sort(
-    (a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt)
+    (a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt),
   );
-  const map = new Map<string, Entry[]>();
+  const map = new Map<string, DateGroup>();
   for (const e of sorted) {
-    const list = map.get(e.date);
-    if (list) list.push(e); else map.set(e.date, [e]);
+    let g = map.get(e.date);
+    if (!g) { g = { date: e.date, receipts: [], payments: [] }; map.set(e.date, g); }
+    (e.type === 'Receipt' ? g.receipts : g.payments).push(e);
   }
-  let running = 0;
-  return Array.from(map.entries()).map(([date, dateEntries]) => {
-    const openingBalance  = running;
-    const dayR            = dateEntries.filter(e => e.type === 'Receipt').reduce((s, e) => s + e.amount, 0);
-    const dayP            = dateEntries.filter(e => e.type === 'Payment').reduce((s, e) => s + e.amount, 0);
-    const closingBalance  = openingBalance + dayR - dayP;
-    running = closingBalance;
-    return { date, dateEntries, openingBalance, closingBalance, dayR, dayP };
-  });
+  return Array.from(map.values());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LIST  PDF
-// Columns: # | Date | Type | Head of Account | Cheque No | Notes | Amount
-//          8 + 22  + 20   + 62              + 24        + 113   + 28  = 277
+// LIST PDF  — CB Report 1 style
+//
+// Side-by-side layout: Receipt columns (left) | Payment columns (right)
+// Rows are paired by index within each date group (like the reference).
+//
+// Columns (11):  Sl | R.Date | R.Chq | R.Amount | R.Heads | R.Notes |
+//                    P.Date | P.Chq | P.Amount | P.Heads | P.Notes
+// Widths (=277): 8 + 18 + 15 + 22 + 38 + 36 + 18 + 15 + 22 + 38 + 47
 // ─────────────────────────────────────────────────────────────────────────────
 export function exportListPDF(entries: Entry[], meta: ExportMeta) {
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  addHeader(doc, meta);
+  const doc    = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const startY = addHeader(doc, meta);
+  const groups = groupByDate(entries);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const body: any[] = [];
+  let slNo = 1;
+
+  for (const { date, receipts, payments } of groups) {
+    // Date separator row (full-width, blue tint)
+    body.push([{
+      content: formatDate(date),
+      colSpan: 11,
+      styles:  { fontStyle: 'bold', fillColor: C_DATE, textColor: [30, 64, 175] as RGB, halign: 'left' as const },
+    }]);
+
+    const maxRows = Math.max(receipts.length, payments.length, 1);
+    for (let i = 0; i < maxRows; i++) {
+      const r = receipts[i];
+      const p = payments[i];
+      body.push([
+        String(slNo++),
+        r ? formatDate(r.date)       : '',
+        r ? (r.chequeNo || '—')      : '',
+        r ? formatCurrency(r.amount) : '',
+        r ? r.headOfAccount          : '',
+        r ? (r.notes || '')          : '',
+        p ? formatDate(p.date)       : '',
+        p ? (p.chequeNo || '—')      : '',
+        p ? formatCurrency(p.amount) : '',
+        p ? p.headOfAccount          : '',
+        p ? (p.notes || '')          : '',
+      ]);
+    }
+  }
+
+  // Grand totals row
   const totalR = entries.filter(e => e.type === 'Receipt').reduce((s, e) => s + e.amount, 0);
   const totalP = entries.filter(e => e.type === 'Payment').reduce((s, e) => s + e.amount, 0);
-  const net    = totalR - totalP;
+  body.push(['', '', 'Total:', formatCurrency(totalR), '', '',
+             '',  'Total:', formatCurrency(totalP), '', '']);
 
   autoTable(doc, {
-    startY:     17,
+    startY,
     margin:     { left: MARGIN, right: MARGIN },
-    tableWidth: CONTENT_W,
-    head: [['#', 'Date', 'Type', 'Head of Account', 'Cheque No', 'Notes', 'Amount']],
-    body: entries.map((e, i) => [
-      String(i + 1),
-      formatDate(e.date),
-      e.type,
-      e.headOfAccount,
-      e.chequeNo || '—',
-      e.notes || '',
-      formatCurrency(e.amount),
-    ]),
-    foot: [
-      ['', '', '', 'Total Receipts', '', '', formatCurrency(totalR)],
-      ['', '', '', 'Total Payments', '', '', formatCurrency(totalP)],
-      ['', '', '', `Net Balance${net < 0 ? ' (Dr)' : ''}`, '', '', formatCurrency(Math.abs(net))],
-    ],
-    styles:             BASE,
-    headStyles:         HEAD_S,
-    footStyles:         FOOT_S,
-    alternateRowStyles: { fillColor: C_ALT },
+    tableWidth: 277,
+    head: [[
+      'Sl No', 'R.Date', 'R.Chq', 'R.Amount', 'R.Heads', 'R.Notes',
+      'P.Date', 'P.Chq', 'P.Amount', 'P.Heads', 'P.Notes',
+    ]],
+    body,
+    styles:     BASE,
+    headStyles: HEAD_S,
     columnStyles: {
-      0: { cellWidth: 8,   halign: 'center' },
-      1: { cellWidth: 22 },
-      2: { cellWidth: 20 },
-      3: { cellWidth: 62 },
-      4: { cellWidth: 24 },
-      5: { cellWidth: 113 },
-      6: { cellWidth: 28,  halign: 'right' },
+      0:  { cellWidth: 8,  halign: 'center' },
+      1:  { cellWidth: 18 },
+      2:  { cellWidth: 15 },
+      3:  { cellWidth: 22, halign: 'right' },
+      4:  { cellWidth: 38 },
+      5:  { cellWidth: 36 },
+      6:  { cellWidth: 18 },
+      7:  { cellWidth: 15 },
+      8:  { cellWidth: 22, halign: 'right' },
+      9:  { cellWidth: 38 },
+      10: { cellWidth: 47 },
     },
     didParseCell: (data) => {
       if (data.section !== 'body') return;
-      const e = entries[data.row.index];
-      if (!e) return;
-      const col = data.column.index;
-      if (col === 2 || col === 6)
-        data.cell.styles.textColor = e.type === 'Receipt' ? C_GREEN : C_RED;
+      const row = body[data.row.index];
+      if (!row || typeof row[0] !== 'string') return;   // skip colSpan date rows
+      // White background for all body rows
+      data.cell.styles.fillColor = C_WHITE;
+      // Total row — check by content
+      if (row[2] === 'Total:') {
+        data.cell.styles.fillColor = C_TOTAL;
+        data.cell.styles.fontStyle = 'bold';
+      }
     },
   });
 
@@ -173,78 +182,114 @@ export function exportListPDF(entries: Entry[], meta: ExportMeta) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DATE  PDF
-// Columns: Date | Type | Head of Account | Cheque No | Notes | Amount
-//          22   + 20   + 67             + 24        + 116   + 28  = 277
+// DATE PDF  — CB Report 2 style (Traditional Cash Book)
+//
+// Side-by-side layout per date group:
+//   • "By Opening Bal" row (grey-50, receipt side, for every group after first)
+//   • Transaction rows paired by index
+//   • Total row (grey bg, bold) — receipts incl. opening bal | payments total
+//   • Closing Balance row (bold label, payment side)
+//   • Grand total row (payment side = payments + closing)
+//   • Empty separator row
+//
+// Columns (8):  R.Date | R.Heads | R.Notes | R.Amount |
+//               P.Date | P.Heads | P.Notes | P.Amount
+// Widths (=277): 20 + 48 + 46 + 25 + 20 + 48 + 46 + 24
 // ─────────────────────────────────────────────────────────────────────────────
 export function exportDatePDF(entries: Entry[], meta: ExportMeta) {
   const doc    = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  addHeader(doc, meta);
+  const startY = addHeader(doc, meta);
+  const groups = groupByDate(entries);
 
-  const groups = computeDateGroups(entries);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const body: any[] = [];
+  // Track which row indices are "total" rows and which are special-label rows
+  const totalRows   = new Set<number>();
+  const specialRows = new Set<number>();  // "By Opening Bal" / "Closing Bal"
 
-  const totRow = (
-    label: string, val: string,
-    bg: RGB, fg: RGB,
-  ) => [
-    { content: label, colSpan: 5, styles: { fontStyle: 'bold', fillColor: bg, textColor: fg } },
-    { content: val,               styles: { fontStyle: 'bold', fillColor: bg, textColor: fg, halign: 'right' } },
-  ];
+  let runningBalance = 0;
 
-  for (const { date, dateEntries, openingBalance, closingBalance, dayR, dayP } of groups) {
-    const receipts          = dateEntries.filter(e => e.type === 'Receipt');
-    const payments          = dateEntries.filter(e => e.type === 'Payment');
-    const receiptGrandTotal = openingBalance + dayR;
-    const paymentGrandTotal = dayP + closingBalance;
+  for (let gi = 0; gi < groups.length; gi++) {
+    const { date, receipts, payments } = groups[gi];
+    const dayR = receipts.reduce((s, e) => s + e.amount, 0);
+    const dayP = payments.reduce((s, e) => s + e.amount, 0);
 
-    // Date header row — spans all 6 columns
-    const ob = openingBalance !== 0
-      ? `  |  Opening Balance: ${formatCurrency(Math.abs(openingBalance))}${openingBalance < 0 ? ' (Dr)' : ''}`
-      : '';
-    body.push([{
-      content: `${formatDate(date)}${ob}`,
-      colSpan: 6,
-      styles:  { fontStyle: 'bold', fontSize: 8, fillColor: C_DATE_BG, textColor: C_BLUE },
-    }]);
+    // By Opening Balance row
+    if (gi > 0) {
+      specialRows.add(body.length);
+      body.push(['', '', 'By Opening Bal', formatCurrency(runningBalance), '', '', '', '']);
+    }
 
-    // Entry rows
-    for (const e of dateEntries) {
-      const isR = e.type === 'Receipt';
+    // Paired transaction rows
+    const maxRows = Math.max(receipts.length, payments.length, 1);
+    for (let i = 0; i < maxRows; i++) {
+      const r = receipts[i];
+      const p = payments[i];
       body.push([
-        formatDate(e.date),
-        { content: e.type, styles: { textColor: isR ? C_GREEN : C_RED } },
-        e.headOfAccount,
-        e.chequeNo || '—',
-        e.notes || '',
-        { content: formatCurrency(e.amount), styles: { textColor: isR ? C_GREEN : C_RED, halign: 'right' } },
+        r ? formatDate(r.date)       : '',
+        r ? r.headOfAccount          : '',
+        r ? (r.notes || '')          : '',
+        r ? formatCurrency(r.amount) : '',
+        p ? formatDate(p.date)       : '',
+        p ? p.headOfAccount          : '',
+        p ? (p.notes || '')          : '',
+        p ? formatCurrency(p.amount) : '',
       ]);
     }
 
-    // Totals rows
-    body.push(totRow(`Receipts (${receipts.length})`,  formatCurrency(receiptGrandTotal),                                  C_R_BG,  C_GREEN));
-    body.push(totRow(`Payments (${payments.length})`,  formatCurrency(dayP),                                               C_P_BG,  C_RED));
-    body.push(totRow(`Closing Balance${closingBalance < 0 ? ' (Dr)' : ''}`,
-                      formatCurrency(Math.abs(closingBalance)),                                                             C_CB_BG, C_ORANGE));
-    body.push(totRow('',                               formatCurrency(paymentGrandTotal),                                   C_P_BG,  C_RED));
+    // Total row (grey bg)
+    const receiptTotal = dayR + (gi > 0 ? runningBalance : 0);
+    totalRows.add(body.length);
+    body.push([
+      '', '', 'Total', formatCurrency(receiptTotal),
+      formatDate(date), '', 'Total', formatCurrency(dayP),
+    ]);
+
+    runningBalance += dayR - dayP;
+
+    // Closing Balance row
+    specialRows.add(body.length);
+    body.push(['', '', '', '', '', '', 'Closing Bal', formatCurrency(runningBalance)]);
+
+    // Grand total row (payments + closing = receipt total)
+    body.push(['', '', '', '', '', '', '', formatCurrency(dayP + runningBalance)]);
+
+    // Empty separator row
+    body.push(['', '', '', '', '', '', '', '']);
   }
 
   autoTable(doc, {
-    startY:     17,
+    startY,
     margin:     { left: MARGIN, right: MARGIN },
-    tableWidth: CONTENT_W,
-    head:       [['Date', 'Type', 'Head of Account', 'Cheque No', 'Notes', 'Amount']],
+    tableWidth: 277,
+    head: [['R.Date', 'R.Heads', 'R.Notes', 'R.Amount', 'P.Date', 'P.Heads', 'P.Notes', 'P.Amount']],
     body,
-    styles:      BASE,
-    headStyles:  HEAD_S,
+    styles:     BASE,
+    headStyles: HEAD_S,
     columnStyles: {
-      0: { cellWidth: 22 },
-      1: { cellWidth: 20 },
-      2: { cellWidth: 67 },
-      3: { cellWidth: 24 },
-      4: { cellWidth: 116 },
-      5: { cellWidth: 28, halign: 'right' },
+      0: { cellWidth: 20 },
+      1: { cellWidth: 48 },
+      2: { cellWidth: 46 },
+      3: { cellWidth: 25, halign: 'right' },
+      4: { cellWidth: 20 },
+      5: { cellWidth: 48 },
+      6: { cellWidth: 46 },
+      7: { cellWidth: 24, halign: 'right' },
+    },
+    didParseCell: (data) => {
+      if (data.section !== 'body') return;
+      const idx = data.row.index;
+      // White background for all body rows
+      data.cell.styles.fillColor = C_WHITE;
+      // Total rows — grey bg + bold
+      if (totalRows.has(idx)) {
+        data.cell.styles.fillColor = C_TOTAL;
+        data.cell.styles.fontStyle = 'bold';
+      }
+      // Special label rows — bold text only
+      if (specialRows.has(idx)) {
+        data.cell.styles.fontStyle = 'bold';
+      }
     },
   });
 
@@ -252,77 +297,110 @@ export function exportDatePDF(entries: Entry[], meta: ExportMeta) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LIST  EXCEL
+// LIST EXCEL  — CB Report 1 layout
 // ─────────────────────────────────────────────────────────────────────────────
 export function exportListExcel(entries: Entry[], meta: ExportMeta) {
   const { financialYear, cashBookType } = meta;
-  const totalR = entries.filter(e => e.type === 'Receipt').reduce((s, e) => s + e.amount, 0);
-  const totalP = entries.filter(e => e.type === 'Payment').reduce((s, e) => s + e.amount, 0);
-  const net    = totalR - totalP;
+  const groups = groupByDate(entries);
 
   const rows: (string | number)[][] = [
-    ['SMP Cash Book', financialYear, cashBookType],
+    [`SMP Cash Book — ${cashBookType}`],
+    [`Financial Year: ${financialYear}`],
     [],
-    ['#', 'Date', 'Type', 'Head of Account', 'Cheque No', 'Notes', 'Amount'],
-    ...entries.map((e, i) => [
-      i + 1, formatDate(e.date), e.type,
-      e.headOfAccount, e.chequeNo || '', e.notes || '', e.amount,
-    ]),
-    [],
-    ['', '', '', 'Total Receipts', '', '', totalR],
-    ['', '', '', 'Total Payments', '', '', totalP],
-    ['', '', '', `Net Balance${net < 0 ? ' (Dr)' : ''}`, '', '', Math.abs(net)],
+    ['Sl No', 'R.Date', 'R.Chq', 'R.Amount', 'R.Heads', 'R.Notes',
+              'P.Date', 'P.Chq', 'P.Amount', 'P.Heads', 'P.Notes'],
   ];
+
+  let slNo = 1;
+  for (const { date, receipts, payments } of groups) {
+    rows.push([`── ${formatDate(date)} ──`]);
+    const maxRows = Math.max(receipts.length, payments.length, 1);
+    for (let i = 0; i < maxRows; i++) {
+      const r = receipts[i];
+      const p = payments[i];
+      rows.push([
+        slNo++,
+        r ? formatDate(r.date) : '', r ? (r.chequeNo || '') : '',
+        r ? r.amount           : '', r ? r.headOfAccount    : '', r ? (r.notes || '') : '',
+        p ? formatDate(p.date) : '', p ? (p.chequeNo || '') : '',
+        p ? p.amount           : '', p ? p.headOfAccount    : '', p ? (p.notes || '') : '',
+      ]);
+    }
+  }
+
+  const totalR = entries.filter(e => e.type === 'Receipt').reduce((s, e) => s + e.amount, 0);
+  const totalP = entries.filter(e => e.type === 'Payment').reduce((s, e) => s + e.amount, 0);
+  rows.push([]);
+  rows.push(['', '', 'Total:', totalR, '', '', '', 'Total:', totalP, '', '']);
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols'] = [
-    { wch: 4 }, { wch: 12 }, { wch: 10 },
-    { wch: 32 }, { wch: 14 }, { wch: 45 }, { wch: 14 },
+    { wch: 6  }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 32 }, { wch: 30 },
+    { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 32 }, { wch: 30 },
   ];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
+  XLSX.utils.book_append_sheet(wb, ws, 'CB Report 1');
   XLSX.writeFile(wb, `smp-cashbook-${financialYear.replace('/', '-')}-list.xlsx`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DATE  EXCEL
+// DATE EXCEL  — CB Report 2 layout (Traditional Cash Book)
 // ─────────────────────────────────────────────────────────────────────────────
 export function exportDateExcel(entries: Entry[], meta: ExportMeta) {
   const { financialYear, cashBookType } = meta;
-  const groups = computeDateGroups(entries);
+  const groups = groupByDate(entries);
 
   const rows: (string | number)[][] = [
-    ['SMP Cash Book', financialYear, cashBookType],
+    [`SMP Cash Book — ${cashBookType}`],
+    [`Financial Year: ${financialYear}`],
     [],
-    ['Date', 'Type', 'Head of Account', 'Cheque No', 'Notes', 'Amount'],
+    ['R.Date', 'R.Heads', 'R.Notes', 'R.Amount', 'P.Date', 'P.Heads', 'P.Notes', 'P.Amount'],
   ];
 
-  for (const { date, dateEntries, openingBalance, closingBalance, dayR, dayP } of groups) {
-    const receipts          = dateEntries.filter(e => e.type === 'Receipt');
-    const payments          = dateEntries.filter(e => e.type === 'Payment');
-    const receiptGrandTotal = openingBalance + dayR;
+  let runningBalance = 0;
+  for (let gi = 0; gi < groups.length; gi++) {
+    const { date, receipts, payments } = groups[gi];
+    const dayR = receipts.reduce((s, e) => s + e.amount, 0);
+    const dayP = payments.reduce((s, e) => s + e.amount, 0);
 
-    const ob = openingBalance !== 0
-      ? `  |  Opening: ${formatCurrency(Math.abs(openingBalance))}${openingBalance < 0 ? ' Dr' : ''}`
-      : '';
-    rows.push([`${formatDate(date)}${ob}`, '', '', '', '', '']);
-
-    for (const e of dateEntries) {
-      rows.push([formatDate(e.date), e.type, e.headOfAccount, e.chequeNo || '', e.notes || '', e.amount]);
+    // By Opening Balance
+    if (gi > 0) {
+      rows.push(['', '', 'By Opening Bal', runningBalance, '', '', '', '']);
     }
 
-    rows.push(['', `Receipts (${receipts.length})`,  '', '', '', receiptGrandTotal]);
-    rows.push(['', `Payments (${payments.length})`,  '', '', '', dayP]);
-    rows.push(['', `Closing Balance${closingBalance < 0 ? ' (Dr)' : ''}`, '', '', '', Math.abs(closingBalance)]);
+    // Paired transaction rows
+    const maxRows = Math.max(receipts.length, payments.length, 1);
+    for (let i = 0; i < maxRows; i++) {
+      const r = receipts[i];
+      const p = payments[i];
+      rows.push([
+        r ? formatDate(r.date) : '', r ? r.headOfAccount : '', r ? (r.notes || '') : '',
+        r ? r.amount           : '',
+        p ? formatDate(p.date) : '', p ? p.headOfAccount : '', p ? (p.notes || '') : '',
+        p ? p.amount           : '',
+      ]);
+    }
+
+    // Total row
+    const receiptTotal = dayR + (gi > 0 ? runningBalance : 0);
+    rows.push(['', '', 'Total', receiptTotal, formatDate(date), '', 'Total', dayP]);
+
+    runningBalance += dayR - dayP;
+
+    // Closing Balance
+    rows.push(['', '', '', '', '', '', 'Closing Bal', runningBalance]);
+    // Grand total (payments + closing)
+    rows.push(['', '', '', '', '', '', '', dayP + runningBalance]);
+    // Separator
     rows.push([]);
   }
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols'] = [
-    { wch: 30 }, { wch: 10 }, { wch: 32 },
-    { wch: 14 }, { wch: 45 }, { wch: 14 },
+    { wch: 12 }, { wch: 32 }, { wch: 30 }, { wch: 14 },
+    { wch: 12 }, { wch: 32 }, { wch: 30 }, { wch: 14 },
   ];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'By Date');
+  XLSX.utils.book_append_sheet(wb, ws, 'CB Report 2');
   XLSX.writeFile(wb, `smp-cashbook-${financialYear.replace('/', '-')}-date.xlsx`);
 }
