@@ -8,77 +8,12 @@ import { useSettings } from '@/context/SettingsContext';
 import { useToast } from '@/context/ToastContext';
 import { apiCreateEntry } from '@/api/entries';
 import { toProperCase } from '@smp-cashbook/shared';
-import { todayISO } from '@/utils/formatDate';
+import { todayISO, formatDate } from '@/utils/formatDate';
 import { formatCurrency } from '@/utils/formatCurrency';
 import { useEntries } from '@/hooks/useEntries';
 import { EntryRow } from '@/components/entries/EntryRow';
 import { EntrySkeleton } from '@/components/entries/EntrySkeleton';
 import type { Entry, EntryType, EntryFormData } from '@smp-cashbook/shared';
-
-function RecentSplitPanel({
-  entries,
-  type,
-  total,
-}: {
-  entries: Entry[];
-  type: 'Receipt' | 'Payment';
-  total: number;
-}) {
-  const isReceipt = type === 'Receipt';
-  const color = isReceipt ? 'green' : 'red';
-
-  return (
-    <div className="flex flex-col min-w-0 flex-1">
-      {/* Coloured header */}
-      <div className={`flex items-center justify-between rounded-t-lg border-x border-t px-4 py-2.5
-        ${isReceipt ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}
-      >
-        <span className={`text-xs font-semibold uppercase tracking-wide text-${color}-700`}>
-          {type}s
-        </span>
-        <span className={`text-sm font-bold text-${color}-700`}>
-          {formatCurrency(total)}
-        </span>
-      </div>
-
-      {entries.length === 0 ? (
-        <div className={`rounded-b-lg border-x border-b py-8 text-center text-sm
-          ${isReceipt ? 'border-green-200' : 'border-red-200'} text-slate-400`}
-        >
-          No recent {type.toLowerCase()} entries
-        </div>
-      ) : (
-        <div className={`rounded-b-lg border-x border-b
-          ${isReceipt ? 'border-green-200' : 'border-red-200'}`}
-        >
-          <table className="w-full text-left text-sm table-fixed">
-            <colgroup>
-              <col className="w-[90px]" />
-              <col />
-              <col className="w-[100px]" />
-              <col className="w-[120px]" />
-              <col className="w-9" />
-            </colgroup>
-            <thead>
-              <tr className="border-b border-slate-100 bg-white">
-                <th className="py-2 pl-4 pr-2 text-xs font-medium text-slate-500 whitespace-nowrap">Date</th>
-                <th className="px-2 py-2 text-xs font-medium text-slate-500 whitespace-nowrap">Head of Account</th>
-                <th className="px-2 py-2 text-xs font-medium text-slate-500 whitespace-nowrap">Cheque No</th>
-                <th className="px-2 py-2 text-xs font-medium text-slate-500 text-right whitespace-nowrap">Amount</th>
-                <th className="py-2 pl-2 pr-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((entry) => (
-                <EntryRow key={entry.id} entry={entry} compact />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── Autocomplete dropdown ──────────────────────────────────────────────────────
 
@@ -107,6 +42,66 @@ function SuggestDropdown({
   );
 }
 
+// ── Date-grouped recent view ───────────────────────────────────────────────────
+
+/** Compact table header shared by receipt and payment panels */
+function CompactHead() {
+  return (
+    <>
+      <colgroup>
+        <col className="w-[90px]" />
+        <col />
+        <col className="w-[100px]" />
+        <col className="w-[120px]" />
+      </colgroup>
+      <thead>
+        <tr className="border-b border-slate-100 bg-white">
+          <th className="py-2 pl-4 pr-2 text-xs font-medium text-slate-500 whitespace-nowrap">Date</th>
+          <th className="px-2 py-2 text-xs font-medium text-slate-500 whitespace-nowrap">Head of Account</th>
+          <th className="px-2 py-2 text-xs font-medium text-slate-500 whitespace-nowrap">Cheque No</th>
+          <th className="pl-2 pr-4 py-2 text-xs font-medium text-slate-500 text-right whitespace-nowrap">Amount</th>
+        </tr>
+      </thead>
+    </>
+  );
+}
+
+/** One receipt or payment panel for a single date group */
+function DatePanel({ entries, type }: { entries: Entry[]; type: 'Receipt' | 'Payment' }) {
+  const isReceipt = type === 'Receipt';
+  return (
+    <div className="flex flex-col min-w-0">
+      {/* Coloured mini-header */}
+      <div className={`flex items-center rounded-t-lg border-x border-t px-3 py-1.5
+        ${isReceipt ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}
+      >
+        <span className={`text-xs font-semibold uppercase tracking-wide
+          ${isReceipt ? 'text-green-700' : 'text-red-700'}`}
+        >
+          {type}s
+        </span>
+      </div>
+      {/* Rows — no bottom border (totals bar closes it) */}
+      <div className={`flex-1 border-x ${isReceipt ? 'border-green-200' : 'border-red-200'}`}>
+        {entries.length > 0 ? (
+          <table className="w-full text-left text-sm table-fixed">
+            <CompactHead />
+            <tbody>
+              {entries.map((e) => (
+                <EntryRow key={e.id} entry={e} compact colorAmount={false} />
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="py-6 text-center text-xs text-slate-400">
+            No {type.toLowerCase()} entries
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EMPTY_FORM: EntryFormData = {
@@ -124,6 +119,8 @@ interface FormErrors {
   headOfAccount?: string;
 }
 
+const RECENT_DATE_COUNT = 5;
+
 export function NewEntryPage() {
   const { settings } = useSettings();
   const { addToast } = useToast();
@@ -136,23 +133,58 @@ export function NewEntryPage() {
     settings.activeCashBookType
   );
 
-  // Last 10 entries by createdAt descending (covers newly created & edited)
-  const recentEntries = useMemo(
-    () =>
-      [...entries]
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        .slice(0, 10),
+  // ── Date-grouped recent entries (all entries, sorted by date asc) ──────────
+
+  const allSorted = useMemo(
+    () => [...entries].sort((a, b) =>
+      a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt)
+    ),
     [entries]
   );
 
-  const recentReceipts  = useMemo(() => recentEntries.filter((e) => e.type === 'Receipt'), [recentEntries]);
-  const recentPayments  = useMemo(() => recentEntries.filter((e) => e.type === 'Payment'), [recentEntries]);
-  const totalR = useMemo(() => recentReceipts.reduce((s, e) => s + e.amount, 0), [recentReceipts]);
-  const totalP = useMemo(() => recentPayments.reduce((s, e) => s + e.amount, 0), [recentPayments]);
+  // Last N distinct dates that have entries (returned in chronological order)
+  const recentDates = useMemo(() => {
+    const seen = new Set<string>();
+    const dates: string[] = [];
+    for (let i = allSorted.length - 1; i >= 0; i--) {
+      const d = allSorted[i].date;
+      if (!seen.has(d)) { seen.add(d); dates.unshift(d); }
+      if (dates.length === RECENT_DATE_COUNT) break;
+    }
+    return dates;
+  }, [allSorted]);
+
+  // Running balance before the first recent date (from ALL entries)
+  const openingBeforeRecent = useMemo(() => {
+    if (recentDates.length === 0) return 0;
+    const firstDate = recentDates[0];
+    return allSorted
+      .filter((e) => e.date < firstDate)
+      .reduce((s, e) => s + (e.type === 'Receipt' ? e.amount : -e.amount), 0);
+  }, [allSorted, recentDates]);
+
+  // Per-date groups with opening/closing balances
+  const recentGroups = useMemo(() => {
+    const dateSet = new Set(recentDates);
+    // bucket entries into their date
+    const byDate = new Map<string, Entry[]>(recentDates.map((d) => [d, []]));
+    for (const e of allSorted) {
+      if (dateSet.has(e.date)) byDate.get(e.date)!.push(e);
+    }
+    let running = openingBeforeRecent;
+    return recentDates.map((date) => {
+      const dateEntries = byDate.get(date)!;
+      const openingBalance = running;
+      const dayR = dateEntries.filter((e) => e.type === 'Receipt').reduce((s, e) => s + e.amount, 0);
+      const dayP = dateEntries.filter((e) => e.type === 'Payment').reduce((s, e) => s + e.amount, 0);
+      const closingBalance = openingBalance + dayR - dayP;
+      running = closingBalance;
+      return { date, dateEntries, openingBalance, closingBalance, dayR, dayP };
+    });
+  }, [allSorted, recentDates, openingBeforeRecent]);
 
   // ── Autocomplete data ──────────────────────────────────────────────────────
 
-  // All same-type entries sorted newest first (source for suggestions)
   const typeEntries = useMemo(
     () => [...entries]
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -160,7 +192,6 @@ export function NewEntryPage() {
     [entries, form.type]
   );
 
-  // Top 2 unique heads matching the current HoA input
   const hoaSuggestions = useMemo(() => {
     const q = form.headOfAccount.trim().toLowerCase();
     if (!q) return [];
@@ -176,13 +207,11 @@ export function NewEntryPage() {
     return result;
   }, [typeEntries, form.headOfAccount]);
 
-  // Most recent note for a given head + current type
   const getMostRecentNote = useCallback(
     (head: string) => typeEntries.find((e) => e.headOfAccount === head)?.notes ?? '',
     [typeEntries]
   );
 
-  // Top 2 unique notes matching the current notes input (head-filtered if HoA is set)
   const notesSuggestions = useMemo(() => {
     const q = form.notes.trim().toLowerCase();
     if (!q) return [];
@@ -201,7 +230,6 @@ export function NewEntryPage() {
     return result;
   }, [typeEntries, form.notes, form.headOfAccount]);
 
-  // Dropdown open state (controlled by focus; onMouseDown on items prevents blur)
   const [hoaOpen, setHoaOpen]     = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
 
@@ -264,7 +292,7 @@ export function NewEntryPage() {
       {/* ── Entry form ── */}
       <form onSubmit={handleSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
 
-        {/* Receipt / Payment toggle — full width */}
+        {/* Receipt / Payment toggle */}
         <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1 gap-1">
           {tabs.map((tab) => (
             <button
@@ -285,7 +313,7 @@ export function NewEntryPage() {
           ))}
         </div>
 
-        {/* Row 1: Date + Cheque No */}
+        {/* Row 1: Date + Cheque No + Amount + Head of Account */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div className="sm:col-span-1">
             <DateInput
@@ -333,9 +361,7 @@ export function NewEntryPage() {
               error={errors.headOfAccount}
               autoComplete="off"
             />
-            {hoaOpen && (
-              <SuggestDropdown suggestions={hoaSuggestions} onSelect={selectHoa} />
-            )}
+            {hoaOpen && <SuggestDropdown suggestions={hoaSuggestions} onSelect={selectHoa} />}
           </div>
         </div>
 
@@ -352,9 +378,7 @@ export function NewEntryPage() {
               onBlur={() => setNotesOpen(false)}
               onKeyDown={(e) => { if (e.key === 'Escape') setNotesOpen(false); }}
             />
-            {notesOpen && (
-              <SuggestDropdown suggestions={notesSuggestions} onSelect={selectNote} />
-            )}
+            {notesOpen && <SuggestDropdown suggestions={notesSuggestions} onSelect={selectNote} />}
           </div>
           <Button
             type="submit"
@@ -367,18 +391,19 @@ export function NewEntryPage() {
 
       </form>
 
-      {/* ── Recent Entries ── */}
+      {/* ── Recent Entries (by date) ── */}
       <div className="space-y-2">
-        {/* Section label */}
+
+        {/* Section header */}
         <div className="flex items-center gap-2">
           <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <span className="text-sm font-medium text-slate-600">Recent Entries</span>
-          {!loading && recentEntries.length > 0 && (
+          {!loading && recentDates.length > 0 && (
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
-              last {recentEntries.length}
+              last {recentDates.length} {recentDates.length === 1 ? 'date' : 'dates'}
             </span>
           )}
           <span className="ml-auto text-xs text-slate-400">
@@ -386,21 +411,93 @@ export function NewEntryPage() {
           </span>
         </div>
 
-        {/* Split columns */}
+        {/* Content */}
         {loading ? (
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <EntrySkeleton rows={5} />
+          <div className="rounded-lg border border-slate-200 p-3">
+            <EntrySkeleton />
           </div>
-        ) : recentEntries.length === 0 ? (
-          <div className="rounded-xl border border-slate-200 bg-white py-12 text-center text-sm text-slate-400 shadow-sm">
+        ) : recentDates.length === 0 ? (
+          <div className="rounded-lg border border-slate-200 py-16 text-center text-sm text-slate-400">
             No entries yet — add your first one above.
           </div>
         ) : (
-          <div className="flex gap-4 items-start">
-            <RecentSplitPanel entries={recentReceipts} type="Receipt" total={totalR} />
-            <RecentSplitPanel entries={recentPayments} type="Payment" total={totalP} />
+          <div className="flex flex-col gap-5">
+            {recentGroups.map(({ date, dateEntries, openingBalance, closingBalance, dayR, dayP }) => {
+              const receipts = dateEntries.filter((e) => e.type === 'Receipt');
+              const payments = dateEntries.filter((e) => e.type === 'Payment');
+              const receiptGrandTotal = openingBalance + dayR;
+              const paymentGrandTotal = dayP + closingBalance;
+
+              return (
+                <div key={date} className="grid grid-cols-2 gap-x-4">
+
+                  {/* Row 1: date bar + opening balance */}
+                  <div className={`mb-2 flex items-center justify-between rounded-lg border px-3 py-1.5
+                    ${openingBalance > 0
+                      ? 'border-blue-100 bg-blue-50/60'
+                      : 'border-slate-200 bg-slate-50'}`}
+                  >
+                    <span className={`text-xs font-semibold
+                      ${openingBalance > 0 ? 'text-slate-700' : 'text-slate-600'}`}
+                    >
+                      {formatDate(date)}
+                    </span>
+                    {openingBalance !== 0 && (
+                      <span className="text-xs font-bold text-blue-600">
+                        By Opening Bal &nbsp;
+                        {formatCurrency(Math.abs(openingBalance))}{openingBalance < 0 ? ' (Dr)' : ''}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mb-2" />
+
+                  {/* Row 2: receipt panel | payment panel */}
+                  <DatePanel entries={receipts} type="Receipt" />
+                  <DatePanel entries={payments} type="Payment" />
+
+                  {/* Row 3: receipt totals | payment totals + closing balance */}
+                  <div className="rounded-b-lg border-x border-b border-green-200 overflow-hidden">
+                    <div className="border-t-2 border-green-300 bg-slate-50 flex items-center justify-between px-3 py-1.5">
+                      <span className="text-xs font-medium text-slate-500">
+                        Total ({receipts.length} {receipts.length === 1 ? 'entry' : 'entries'})
+                      </span>
+                      <span className="text-xs font-bold text-green-700">
+                        {formatCurrency(receiptGrandTotal)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-b-lg border-x border-b border-red-200 overflow-hidden">
+                    <div className="border-t-2 border-red-300 bg-slate-50">
+                      <div className="flex items-center justify-between px-3 py-1.5">
+                        <span className="text-xs font-medium text-slate-500">
+                          Total ({payments.length} {payments.length === 1 ? 'entry' : 'entries'})
+                        </span>
+                        <span className="text-xs font-bold text-red-700">
+                          {formatCurrency(dayP)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between px-3 py-1.5">
+                        <span className="text-xs font-semibold text-slate-600">Closing Balance</span>
+                        <span className="text-xs font-bold text-orange-600">
+                          {formatCurrency(Math.abs(closingBalance))}{closingBalance < 0 ? ' (Dr)' : ''}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between px-3 py-1.5 border-t border-slate-200">
+                        <span />
+                        <span className="text-xs font-bold text-red-700">
+                          {formatCurrency(paymentGrandTotal)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              );
+            })}
           </div>
         )}
+
       </div>
 
     </div>
