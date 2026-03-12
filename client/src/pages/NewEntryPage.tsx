@@ -369,7 +369,12 @@ export function NewEntryPage() {
               onChange={(e) => { set('headOfAccount', toProperCase(e.target.value)); setHoaOpen(true); }}
               onFocus={() => setHoaOpen(true)}
               onBlur={() => setHoaOpen(false)}
-              onKeyDown={(e) => { if (e.key === 'Escape') setHoaOpen(false); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') { setHoaOpen(false); return; }
+                if (e.key === 'Tab' && hoaOpen && hoaSuggestions.length > 0) {
+                  e.preventDefault(); selectHoa(hoaSuggestions[0]);
+                }
+              }}
               error={errors.headOfAccount}
               autoComplete="off"
             />
@@ -391,6 +396,9 @@ export function NewEntryPage() {
               onBlur={() => setNotesOpen(false)}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') { setNotesOpen(false); return; }
+                if (e.key === 'Tab' && notesOpen && notesSuggestions.length > 0) {
+                  e.preventDefault(); selectNote(notesSuggestions[0]); return;
+                }
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); formRef.current?.requestSubmit(); }
               }}
             />
