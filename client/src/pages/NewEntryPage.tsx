@@ -380,13 +380,22 @@ export function NewEntryPage() {
             />
             {notesOpen && <SuggestDropdown suggestions={notesSuggestions} onSelect={selectNote} />}
           </div>
-          <Button
-            type="submit"
-            loading={submitting}
-            className="shrink-0 h-[74px] px-8 self-end"
-          >
-            Add {form.type}
-          </Button>
+          <div className="shrink-0 self-end flex flex-col gap-2">
+            <Button
+              type="submit"
+              loading={submitting}
+              className="h-[38px] px-8"
+            >
+              Add {form.type}
+            </Button>
+            <button
+              type="button"
+              onClick={() => { setForm({ ...EMPTY_FORM, type: form.type, date: todayISO() }); setErrors({}); }}
+              className="h-[28px] rounded-md border border-slate-200 bg-white px-4 text-xs font-medium text-slate-500 hover:border-slate-300 hover:text-slate-700 transition-colors"
+            >
+              Reset
+            </button>
+          </div>
         </div>
 
       </form>

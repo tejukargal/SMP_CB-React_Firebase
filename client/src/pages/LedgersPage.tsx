@@ -595,6 +595,17 @@ export function LedgersPage() {
             )}
           </div>
 
+          {/* Clear search button */}
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="shrink-0 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:border-slate-300 hover:text-slate-700 transition-colors"
+            >
+              Clear
+            </button>
+          )}
+
           {/* Compare mode toggle */}
           <button
             onClick={handleToggleCompare}
