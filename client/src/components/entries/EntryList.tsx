@@ -4,6 +4,8 @@ import { EntrySkeleton } from './EntrySkeleton';
 import { EntryFilters, type FilterState } from './EntryFilters';
 import { formatCurrency } from '@/utils/formatCurrency';
 import { formatDate } from '@/utils/formatDate';
+import { useSettings } from '@/context/SettingsContext';
+import { exportListPDF, exportDatePDF, exportListExcel, exportDateExcel } from '@/utils/exportEntries';
 import type { Entry } from '@smp-cashbook/shared';
 
 interface EntryListProps {
@@ -395,6 +397,7 @@ const DateGroupedView = memo(function DateGroupedView({
 export function EntryList({ entries, loading, refreshing, error }: EntryListProps) {
   const [filters, setFilters] = useState<FilterState>(INIT_FILTERS);
   const [viewMode, setViewMode] = useState<ViewMode>('split');
+  const { settings } = useSettings();
 
   const cycleView = () =>
     setViewMode((v) => VIEWS[(VIEWS.indexOf(v) + 1) % VIEWS.length]);
@@ -463,6 +466,53 @@ export function EntryList({ entries, loading, refreshing, error }: EntryListProp
               headOfAccountOptions={headOfAccountOptions}
             />
           </div>
+
+          {/* Export buttons — only for list and date views */}
+          {(viewMode === 'list' || viewMode === 'date') && (() => {
+            const exportMeta = {
+              financialYear: settings.activeFinancialYear,
+              cashBookType:  settings.activeCashBookType,
+              filters,
+            };
+            const onPDF  = () => viewMode === 'list'
+              ? exportListPDF(filtered, exportMeta)
+              : exportDatePDF(filtered, exportMeta);
+            const onXLS  = () => viewMode === 'list'
+              ? exportListExcel(filtered, exportMeta)
+              : exportDateExcel(filtered, exportMeta);
+            return (
+              <>
+                <button
+                  type="button"
+                  onClick={onPDF}
+                  title="Export as PDF"
+                  className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
+                    px-2.5 py-2 text-xs font-medium text-slate-600
+                    hover:border-red-300 hover:text-red-600 transition-colors"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  <span>PDF</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onXLS}
+                  title="Export as Excel"
+                  className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
+                    px-2.5 py-2 text-xs font-medium text-slate-600
+                    hover:border-green-300 hover:text-green-600 transition-colors"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span>Excel</span>
+                </button>
+              </>
+            );
+          })()}
 
           {/* View toggle button */}
           <button
