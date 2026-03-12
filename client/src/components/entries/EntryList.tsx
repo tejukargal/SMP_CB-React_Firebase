@@ -168,7 +168,7 @@ const SplitTable = memo(function SplitTable({
   const color = isReceipt ? 'green' : 'red';
 
   return (
-    <div className="flex flex-col min-w-0 flex-1">
+    <div className="flex flex-col min-w-0">
       <div className={`flex items-center justify-between rounded-t-lg border-x border-t px-4 py-2.5
         ${isReceipt ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}
       >
@@ -185,15 +185,13 @@ const SplitTable = memo(function SplitTable({
           <EntrySkeleton />
         </div>
       ) : entries.length === 0 ? (
-        <div className={`flex-1 rounded-b-lg border-x border-b py-10 text-center text-sm
+        <div className={`border-x py-10 text-center text-sm
           ${isReceipt ? 'border-green-200' : 'border-red-200'} text-slate-400`}
         >
           No {type.toLowerCase()} entries
         </div>
       ) : (
-        <div className={`flex-1 rounded-b-lg border-x border-b
-          ${isReceipt ? 'border-green-200' : 'border-red-200'}`}
-        >
+        <div className={`border-x ${isReceipt ? 'border-green-200' : 'border-red-200'}`}>
           <table className="w-full text-left text-sm table-fixed">
             <CompactTableHead sticky />
             <tbody>
@@ -201,23 +199,32 @@ const SplitTable = memo(function SplitTable({
                 <EntryRow key={entry.id} entry={entry} compact />
               ))}
             </tbody>
-            <tfoot>
-              <tr className="border-t border-slate-100 bg-slate-50">
-                <td colSpan={2} className="py-2 pl-4 pr-2 text-xs font-medium text-slate-500 whitespace-nowrap">
-                  Total ({entries.length} {entries.length === 1 ? 'entry' : 'entries'})
-                </td>
-                <td />
-                <td className={`pl-2 pr-4 py-2 text-sm font-bold text-right whitespace-nowrap text-${color}-700`}>
-                  {formatCurrency(total)}
-                </td>
-              </tr>
-            </tfoot>
           </table>
         </div>
       )}
     </div>
   );
 });
+
+function SplitTotalsCell({ entries, type }: { entries: Entry[]; type: 'Receipt' | 'Payment' }) {
+  const isReceipt = type === 'Receipt';
+  const color = isReceipt ? 'green' : 'red';
+  const total = entries.reduce((s, e) => s + e.amount, 0);
+  return (
+    <div className={`rounded-b-lg border-x border-b overflow-hidden
+      ${isReceipt ? 'border-green-200' : 'border-red-200'}`}
+    >
+      <div className="border-t border-slate-100 bg-slate-50 flex items-center justify-between px-4 py-2">
+        <span className="text-xs font-medium text-slate-500">
+          Total ({entries.length} {entries.length === 1 ? 'entry' : 'entries'})
+        </span>
+        <span className={`text-sm font-bold text-${color}-700`}>
+          {formatCurrency(total)}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 // ── View 3: By Date ───────────────────────────────────────────────────────────
 
@@ -556,9 +563,11 @@ export function EntryList({ entries, loading, refreshing, error }: EntryListProp
         <ListView entries={filtered} loading={loading} />
       )}
       {viewMode === 'split' && (
-        <div className="flex gap-4 items-stretch">
+        <div className="grid grid-cols-2 gap-x-4">
           <SplitTable entries={receipts} type="Receipt" loading={loading} />
           <SplitTable entries={payments} type="Payment" loading={loading} />
+          {!loading && <SplitTotalsCell entries={receipts} type="Receipt" />}
+          {!loading && <SplitTotalsCell entries={payments} type="Payment" />}
         </div>
       )}
       {viewMode === 'date' && (
