@@ -16,8 +16,5 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.0"
-  },
-  "dependencies": {
-    "@esbuild/win32-x64": "^0.27.3"
   }
 }
