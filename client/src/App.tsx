@@ -6,6 +6,7 @@ import { NewEntryPage } from '@/pages/NewEntryPage';
 import { EntriesPage } from '@/pages/EntriesPage';
 import { LedgersPage } from '@/pages/LedgersPage';
 import { FeeRegisterPage } from '@/pages/FeeRegisterPage';
+import { SalaryRegisterPage } from '@/pages/SalaryRegisterPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { Spinner } from '@/components/ui/Spinner';
@@ -45,6 +46,7 @@ export default function App() {
           <Route path="entries" element={<EntriesPage />} />
           <Route path="ledgers" element={<LedgersPage />} />
           <Route path="fee-register" element={<FeeRegisterPage />} />
+          <Route path="salary-register" element={<SalaryRegisterPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>

@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { ImportSection } from './ImportSection';
 import { ResetSection } from './ResetSection';
+import { SalaryEntrySection } from './SalaryEntrySection';
 import { cn } from '@/utils/cn';
 import { getCurrentFinancialYear, generateFYLabel, isValidFY } from '@smp-cashbook/shared';
 import type { CashBookType } from '@smp-cashbook/shared';
@@ -109,7 +110,7 @@ export function SettingsPanel() {
   const cashBookTypes: CashBookType[] = ['Aided', 'Un-Aided'];
 
   return (
-    <div className="space-y-8 max-w-2xl">
+    <div className="space-y-8 max-w-3xl">
 
       {/* Cash Book Type */}
       <section>
@@ -208,6 +209,12 @@ export function SettingsPanel() {
           Suggested next: <button className="font-medium text-blue-600 hover:underline" onClick={() => setNewFY(suggestedFY)}>{suggestedFY}</button>
         </p>
       </section>
+
+      {/* Divider */}
+      <hr className="border-slate-200" />
+
+      {/* Quick Salary Entry */}
+      <SalaryEntrySection />
 
       {/* Divider */}
       <hr className="border-slate-200" />

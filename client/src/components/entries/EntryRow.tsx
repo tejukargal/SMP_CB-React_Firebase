@@ -45,7 +45,7 @@ export const EntryRow = memo(function EntryRow({
   return (
     <>
       <tr
-        onClick={() => setDetailOpen(true)}
+        onDoubleClick={() => setDetailOpen(true)}
         onContextMenu={handleContextMenu}
         className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
       >
