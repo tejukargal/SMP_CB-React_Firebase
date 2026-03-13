@@ -12,6 +12,7 @@ export interface Entry {
   financialYear: string; // e.g. "2025-26"
   cashBookType: CashBookType;
   createdAt: string; // ISO timestamp
+  voucherNo?: string; // Optional voucher number for Payment entries, e.g. "25-26_0001"
 }
 
 export interface EntryFormData {

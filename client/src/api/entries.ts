@@ -20,6 +20,7 @@ export interface UpdateEntryPayload {
   headOfAccount?: string;
   notes?: string;
   type?: string;
+  voucherNo?: string;
 }
 
 export async function apiUpdateEntry(

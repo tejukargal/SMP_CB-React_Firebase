@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useToast } from '@/context/ToastContext';
 import { apiDeleteEntry, apiUpdateEntry } from '@/api/entries';
 import { formatCurrency } from '@/utils/formatCurrency';
@@ -123,6 +123,16 @@ export function EntryDetailModal({ entry, onClose }: { entry: Entry; onClose: ()
     setConfirmDelete(false);
   };
 
+  // Close on Escape — cancel edit if in edit mode, close modal otherwise
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (editing) cancelEdit(); else onClose();
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [editing, cancelEdit, onClose]);
+
   const TABS: EntryType[] = ['Receipt', 'Payment'];
 
   return (
@@ -134,7 +144,7 @@ export function EntryDetailModal({ entry, onClose }: { entry: Entry; onClose: ()
       />
 
       {/* Panel */}
-      <div className="relative z-10 w-full max-w-md rounded-xl bg-white shadow-xl animate-slide-up">
+      <div className="relative z-10 w-full max-w-md rounded-xl bg-white shadow-xl animate-slide-up flex flex-col max-h-[90vh]">
 
         {/* Header */}
         <div className={`flex items-center justify-between rounded-t-xl px-5 py-4 ${
@@ -163,107 +173,134 @@ export function EntryDetailModal({ entry, onClose }: { entry: Entry; onClose: ()
         </div>
 
         {/* Body */}
-        <div className="px-5 py-5">
-          {editing ? (
-            /* ── Edit mode ── */
-            <div className="space-y-4">
-              {/* Type toggle */}
-              <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1 gap-1">
-                {TABS.map((tab) => (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() => setField('type', tab)}
-                    className={cn(
-                      'flex-1 rounded-md py-1.5 text-sm font-medium transition-all',
-                      form.type === tab
-                        ? tab === 'Receipt'
-                          ? 'bg-white text-green-700 shadow-sm ring-1 ring-slate-200'
-                          : 'bg-white text-red-700 shadow-sm ring-1 ring-slate-200'
-                        : 'text-slate-500 hover:text-slate-700'
-                    )}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
 
-              <div className="grid grid-cols-2 gap-3">
-                <DateInput
-                  label="Date"
-                  id="edit-date"
-                  value={form.date}
-                  onChange={(iso) => setField('date', iso)}
-                  error={editErrors.date}
+          {/* ── Additional Details (always read-only) ── */}
+          <div>
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Additional Details
+            </p>
+            <div className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-2.5 flex items-start gap-6">
+              <ViewField label="Financial Year" value={entry.financialYear} />
+              <ViewField label="Cash Book Type" value={entry.cashBookType}  />
+              {entry.createdAt && (
+                <ViewField
+                  label="Created At"
+                  value={new Date(entry.createdAt).toLocaleString('en-IN', {
+                    day: '2-digit', month: 'short', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit',
+                  })}
+                  valueClass="text-xs text-slate-500 font-normal"
                 />
-                <Input
-                  label="Cheque No"
-                  id="edit-cheque"
-                  type="text"
-                  placeholder="Optional"
-                  value={form.chequeNo}
-                  onChange={(e) => setField('chequeNo', e.target.value)}
-                />
-              </div>
-
-              <Input
-                label="Amount (₹)"
-                id="edit-amount"
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={form.amount}
-                onChange={(e) => setField('amount', e.target.value)}
-                error={editErrors.amount}
-              />
-
-              <Input
-                label="Head of Account"
-                id="edit-hoa"
-                type="text"
-                value={form.headOfAccount}
-                onChange={(e) => setField('headOfAccount', toProperCase(e.target.value))}
-                error={editErrors.headOfAccount}
-              />
-
-              <Textarea
-                label="Notes"
-                id="edit-notes"
-                placeholder="Optional remarks..."
-                value={form.notes}
-                onChange={(e) => setField('notes', toProperCase(e.target.value))}
-              />
-            </div>
-          ) : (
-            /* ── View mode ── */
-            <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-              <ViewField label="Date" value={formatDate(entry.date)} />
-              <ViewField label="Cheque No" value={entry.chequeNo} />
-              <div className="col-span-2">
-                <ViewField label="Head of Account" value={entry.headOfAccount} />
-              </div>
-              {entry.notes && (
-                <div className="col-span-2">
-                  <span className="text-xs text-slate-400">Notes</span>
-                  <p className="mt-0.5 text-sm text-slate-700 leading-relaxed">{entry.notes}</p>
+              )}
+              {entry.type === 'Payment' && entry.voucherNo && (
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs text-slate-400">Vr No</span>
+                  <span className="text-xs font-mono font-semibold text-amber-600">{entry.voucherNo}</span>
                 </div>
               )}
-              <ViewField label="Financial Year" value={entry.financialYear} />
-              <ViewField label="Cash Book Type" value={entry.cashBookType} />
-              {entry.createdAt && (
-                <div className="col-span-2">
-                  <ViewField
-                    label="Created At"
-                    value={new Date(entry.createdAt).toLocaleString('en-IN', {
-                      day: '2-digit', month: 'short', year: 'numeric',
-                      hour: '2-digit', minute: '2-digit',
-                    })}
-                    valueClass="text-slate-500 font-normal"
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100" />
+
+          {editing ? (
+            /* ── Edit mode: editable fields ── */
+            <div>
+              <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Edit Transaction
+              </p>
+              <div className="space-y-3">
+                {/* Type toggle */}
+                <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1 gap-1">
+                  {TABS.map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setField('type', tab)}
+                      className={cn(
+                        'flex-1 rounded-md py-1.5 text-sm font-medium transition-all',
+                        form.type === tab
+                          ? tab === 'Receipt'
+                            ? 'bg-white text-green-700 shadow-sm ring-1 ring-slate-200'
+                            : 'bg-white text-red-700 shadow-sm ring-1 ring-slate-200'
+                          : 'text-slate-500 hover:text-slate-700'
+                      )}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <DateInput
+                    label="Date"
+                    id="edit-date"
+                    value={form.date}
+                    onChange={(iso) => setField('date', iso)}
+                    error={editErrors.date}
+                  />
+                  <Input
+                    label="Cheque No"
+                    id="edit-cheque"
+                    type="text"
+                    placeholder="Optional"
+                    value={form.chequeNo}
+                    onChange={(e) => setField('chequeNo', toProperCase(e.target.value))}
                   />
                 </div>
-              )}
+
+                <Input
+                  label="Amount (₹)"
+                  id="edit-amount"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={form.amount}
+                  onChange={(e) => setField('amount', e.target.value)}
+                  error={editErrors.amount}
+                />
+
+                <Input
+                  label="Head of Account"
+                  id="edit-hoa"
+                  type="text"
+                  value={form.headOfAccount}
+                  onChange={(e) => setField('headOfAccount', toProperCase(e.target.value))}
+                  error={editErrors.headOfAccount}
+                />
+
+                <Textarea
+                  label="Notes"
+                  id="edit-notes"
+                  placeholder="Optional remarks..."
+                  value={form.notes}
+                  onChange={(e) => setField('notes', toProperCase(e.target.value))}
+                />
+              </div>
+            </div>
+          ) : (
+            /* ── View mode: transaction fields ── */
+            <div>
+              <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Transaction
+              </p>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                <ViewField label="Date"      value={formatDate(entry.date)} />
+                <ViewField label="Cheque No" value={entry.chequeNo} />
+                <div className="col-span-2">
+                  <ViewField label="Head of Account" value={entry.headOfAccount} />
+                </div>
+                {entry.notes && (
+                  <div className="col-span-2">
+                    <span className="text-xs text-slate-400">Notes</span>
+                    <p className="mt-0.5 text-sm text-slate-700 leading-relaxed">{entry.notes}</p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
+
         </div>
 
         {/* Footer */}

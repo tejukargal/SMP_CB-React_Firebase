@@ -44,12 +44,14 @@ const MONTHS: Record<string, string> = {
 };
 
 export function parseDateToISO(val: unknown): string | null {
-  // JS Date from SheetJS cellDates:true
+  // JS Date object — round to nearest UTC day to neutralise any sub-second
+  // floating-point drift introduced by serial → timestamp conversions.
   if (val instanceof Date) {
     if (isNaN(val.getTime())) return null;
-    const y = val.getFullYear();
-    const m = String(val.getMonth() + 1).padStart(2, '0');
-    const d = String(val.getDate()).padStart(2, '0');
+    const utc = new Date(Math.round(val.getTime() / 86400000) * 86400000);
+    const y = utc.getUTCFullYear();
+    const m = String(utc.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(utc.getUTCDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   }
 
@@ -163,7 +165,12 @@ export function parseImportFile(file: File): Promise<ParseResult> {
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target!.result as ArrayBuffer);
-        const wb = XLSX.read(data, { type: 'array', cellDates: true });
+        // cellDates:false keeps date cells as raw Excel serial numbers.
+        // SheetJS's cellDates:true has a UTC-conversion bug that shifts dates
+        // by ~10 seconds, causing local-midnight dates to land on the previous
+        // calendar day in IST (+5:30). The numeric path below uses UTC methods
+        // on the serial → timestamp conversion and is always correct.
+        const wb = XLSX.read(data, { type: 'array', cellDates: false });
 
         const sheetName = wb.SheetNames[0];
         const sheet = wb.Sheets[sheetName];

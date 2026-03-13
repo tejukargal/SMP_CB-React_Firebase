@@ -41,6 +41,7 @@ export function useEntries(financialYear: string, cashBookType: CashBookType) {
             financialYear: data.financialYear ?? financialYear,
             cashBookType: data.cashBookType ?? cashBookType,
             createdAt: data.createdAt?.toDate().toISOString() ?? '',
+            voucherNo: data.voucherNo as string | undefined,
           };
         });
         setEntries(docs);

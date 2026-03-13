@@ -53,6 +53,7 @@ export async function getEntries(
       financialYear: data.financialYear,
       cashBookType: data.cashBookType,
       createdAt: data.createdAt?.toDate().toISOString() ?? '',
+      voucherNo: data.voucherNo as string | undefined,
     };
   });
 }
@@ -64,6 +65,7 @@ export interface UpdateEntryFields {
   headOfAccount?: string;
   notes?: string;
   type?: string;
+  voucherNo?: string;
 }
 
 export async function updateEntry(
@@ -75,11 +77,20 @@ export async function updateEntry(
   const col = entryCollection(financialYear, cashBookType);
   const ref = col.doc(entryId);
   // Fetch current doc and write update in parallel, then merge
+  // Build the update payload — empty voucherNo means delete the field
+  const updatePayload: Record<string, unknown> = { ...fields, updatedAt: admin.firestore.FieldValue.serverTimestamp() };
+  if (fields.voucherNo === '') {
+    updatePayload['voucherNo'] = admin.firestore.FieldValue.delete();
+  }
+
   const [snap] = await Promise.all([
     ref.get(),
-    ref.update({ ...fields, updatedAt: admin.firestore.FieldValue.serverTimestamp() }),
+    ref.update(updatePayload),
   ]);
   const data = snap.data()!;
+  const resolvedVoucherNo = fields.voucherNo === ''
+    ? undefined
+    : (fields.voucherNo ?? data.voucherNo) as string | undefined;
   return {
     id: entryId,
     date: (fields.date ?? data.date) as string,
@@ -91,6 +102,7 @@ export async function updateEntry(
     financialYear: data.financialYear as string,
     cashBookType: data.cashBookType as Entry['cashBookType'],
     createdAt: data.createdAt?.toDate().toISOString() ?? '',
+    voucherNo: resolvedVoucherNo,
   };
 }
 

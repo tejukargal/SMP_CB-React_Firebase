@@ -83,6 +83,7 @@ export async function handleUpdateEntry(
       headOfAccount?: string;
       notes?: string;
       type?: string;
+      voucherNo?: string;
     };
 
     if (body.amount !== undefined && (isNaN(Number(body.amount)) || Number(body.amount) <= 0)) {
@@ -99,6 +100,7 @@ export async function handleUpdateEntry(
     if (body.headOfAccount !== undefined) fields['headOfAccount'] = toProperCase(body.headOfAccount.trim());
     if (body.notes !== undefined) fields['notes'] = body.notes ? toProperCase(body.notes.trim()) : '';
     if (body.type !== undefined) fields['type'] = body.type;
+    if (body.voucherNo !== undefined) fields['voucherNo'] = body.voucherNo.trim();
 
     const entry = await updateEntry(id, fyParam, typeParam, fields);
     res.json({ data: entry, message: 'Entry updated' });

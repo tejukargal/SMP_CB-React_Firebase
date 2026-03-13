@@ -5,6 +5,7 @@ import { formatCurrency } from '@/utils/formatCurrency';
 import { formatDate } from '@/utils/formatDate';
 import {
   FEE_HEADS,
+  canonicalFeeHead,
   buildFeeRows,
   exportFeeRegisterPDF,
   exportFeeRegisterExcel,
@@ -26,7 +27,7 @@ export function FeeRegisterPage() {
   // ── Fee receipt entries ────────────────────────────────────────────────────
   const feeEntries = useMemo(
     () => entries.filter(
-      e => e.type === 'Receipt' && (FEE_HEADS as readonly string[]).includes(e.headOfAccount),
+      e => e.type === 'Receipt' && canonicalFeeHead(e.headOfAccount) !== undefined,
     ),
     [entries],
   );

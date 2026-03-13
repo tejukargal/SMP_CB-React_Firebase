@@ -40,6 +40,13 @@ export const FEE_HEADS = [
 
 export type FeeHead = typeof FEE_HEADS[number];
 
+/** Returns the canonical FEE_HEADS entry whose label matches `head`
+ *  case-insensitively, or `undefined` if it is not a fee head. */
+export function canonicalFeeHead(head: string): string | undefined {
+  const lower = head.toLowerCase();
+  return (FEE_HEADS as readonly string[]).find(h => h.toLowerCase() === lower);
+}
+
 // ── Row type ──────────────────────────────────────────────────────────────────
 export interface FeeRegisterRow {
   date:     string;
@@ -64,10 +71,11 @@ export function buildFeeRows(
 
   for (const e of entries) {
     if (e.type !== 'Receipt') continue;
-    if (!(FEE_HEADS as readonly string[]).includes(e.headOfAccount)) continue;
+    const head = canonicalFeeHead(e.headOfAccount);
+    if (!head) continue;
     if (!dateMap.has(e.date)) dateMap.set(e.date, new Map());
     const m = dateMap.get(e.date)!;
-    m.set(e.headOfAccount, (m.get(e.headOfAccount) ?? 0) + e.amount);
+    m.set(head, (m.get(head) ?? 0) + e.amount);
   }
 
   return Array.from(dateMap.keys())

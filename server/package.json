@@ -11,6 +11,7 @@
     "@smp-cashbook/shared": "*",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
+    "esbuild": "^0.27.4",
     "express": "^4.21.0",
     "firebase-admin": "^12.3.0",
     "serverless-http": "^4.0.0"
@@ -21,5 +22,8 @@
     "@types/node": "^22.0.0",
     "tsx": "^4.16.0",
     "typescript": "^5.4.5"
+  },
+  "optionalDependencies": {
+    "@esbuild/win32-x64": "^0.27.4"
   }
 }

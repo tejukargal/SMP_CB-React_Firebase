@@ -112,7 +112,7 @@ export function EntryForm() {
           type="text"
           placeholder="Optional"
           value={form.chequeNo}
-          onChange={(e) => set('chequeNo', e.target.value)}
+          onChange={(e) => set('chequeNo', toProperCase(e.target.value))}
         />
       </div>
 

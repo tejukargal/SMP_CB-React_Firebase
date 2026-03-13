@@ -93,9 +93,11 @@ function CompactTableHead({ sticky }: { sticky?: boolean }) {
 const ListView = memo(function ListView({
   entries,
   loading,
+  allEntries,
 }: {
   entries: Entry[];
   loading: boolean;
+  allEntries: Entry[];
 }) {
   if (loading) {
     return (
@@ -134,7 +136,7 @@ const ListView = memo(function ListView({
         </thead>
         <tbody>
           {entries.map((entry) => (
-            <EntryRow key={entry.id} entry={entry} compact={false} />
+            <EntryRow key={entry.id} entry={entry} compact={false} allEntries={allEntries} />
           ))}
         </tbody>
         <tfoot>
@@ -158,10 +160,12 @@ const SplitTable = memo(function SplitTable({
   entries,
   type,
   loading,
+  allEntries = [],
 }: {
   entries: Entry[];
   type: 'Receipt' | 'Payment';
   loading: boolean;
+  allEntries?: Entry[];
 }) {
   const isReceipt = type === 'Receipt';
   const total = useMemo(() => entries.reduce((s, e) => s + e.amount, 0), [entries]);
@@ -196,7 +200,7 @@ const SplitTable = memo(function SplitTable({
             <CompactTableHead sticky />
             <tbody>
               {entries.map((entry) => (
-                <EntryRow key={entry.id} entry={entry} compact />
+                <EntryRow key={entry.id} entry={entry} compact allEntries={allEntries} />
               ))}
             </tbody>
           </table>
@@ -232,9 +236,11 @@ function SplitTotalsCell({ entries, type }: { entries: Entry[]; type: 'Receipt' 
 function DateGroupPanel({
   entries,
   type,
+  allEntries = [],
 }: {
   entries: Entry[];
   type: 'Receipt' | 'Payment';
+  allEntries?: Entry[];
 }) {
   const isReceipt = type === 'Receipt';
   const color = isReceipt ? 'green' : 'red';
@@ -257,7 +263,7 @@ function DateGroupPanel({
             <CompactTableHead />
             <tbody>
               {entries.map((entry) => (
-                <EntryRow key={entry.id} entry={entry} compact colorAmount={false} />
+                <EntryRow key={entry.id} entry={entry} compact colorAmount={false} allEntries={allEntries} />
               ))}
             </tbody>
           </table>
@@ -274,9 +280,11 @@ function DateGroupPanel({
 const DateGroupedView = memo(function DateGroupedView({
   entries,
   loading,
+  allEntries,
 }: {
   entries: Entry[];
   loading: boolean;
+  allEntries: Entry[];
 }) {
   // Group entries by date, preserving Firestore's date-asc order
   const groups = useMemo(() => {
@@ -353,7 +361,7 @@ const DateGroupedView = memo(function DateGroupedView({
 
             {/* Row 2: receipt panel | payment panel */}
             <DateGroupPanel entries={receipts} type="Receipt" />
-            <DateGroupPanel entries={payments} type="Payment" />
+            <DateGroupPanel entries={payments} type="Payment" allEntries={allEntries} />
 
             {/* Row 3: receipt totals | payment totals — flush with panels above */}
             <div className="rounded-b-lg border-x border-b border-green-200 overflow-hidden">
@@ -560,18 +568,18 @@ export function EntryList({ entries, loading, refreshing, error }: EntryListProp
 
       {/* ── Content — switches by viewMode ── */}
       {viewMode === 'list' && (
-        <ListView entries={filtered} loading={loading} />
+        <ListView entries={filtered} loading={loading} allEntries={entries} />
       )}
       {viewMode === 'split' && (
         <div className="grid grid-cols-2 gap-x-4">
           <SplitTable entries={receipts} type="Receipt" loading={loading} />
-          <SplitTable entries={payments} type="Payment" loading={loading} />
+          <SplitTable entries={payments} type="Payment" loading={loading} allEntries={entries} />
           {!loading && <SplitTotalsCell entries={receipts} type="Receipt" />}
           {!loading && <SplitTotalsCell entries={payments} type="Payment" />}
         </div>
       )}
       {viewMode === 'date' && (
-        <DateGroupedView entries={filtered} loading={loading} />
+        <DateGroupedView entries={filtered} loading={loading} allEntries={entries} />
       )}
 
     </div>
