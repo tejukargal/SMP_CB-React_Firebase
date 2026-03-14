@@ -191,24 +191,17 @@ export function ImportSection() {
   };
 
   return (
-    <section>
-      <div className="mb-3 flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-700">Import Cash Book Data</h2>
-          <p className="mt-0.5 text-xs text-slate-400">
-            Upload an Excel (.xlsx / .xls) or CSV file with columns: Financial Year, Cash Book Type,
-            Date, Type, Cheque No, Amount, Head of Accounts, Notes
-          </p>
-        </div>
-        {stage !== 'idle' && stage !== 'parsing' && (
+    <div>
+      {stage !== 'idle' && stage !== 'parsing' && (
+        <div className="mb-3 flex justify-end">
           <button
             onClick={reset}
             className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
           >
             Start over
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Idle: drop zone ── */}
       {(stage === 'idle' || stage === 'parsing') && (
@@ -304,6 +297,6 @@ export function ImportSection() {
           </div>
         </div>
       )}
-    </section>
+    </div>
   );
 }

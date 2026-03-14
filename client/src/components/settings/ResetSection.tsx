@@ -61,11 +61,7 @@ export function ResetSection() {
   };
 
   return (
-    <section>
-      <h2 className="mb-1 text-sm font-semibold text-slate-700">Reset Transactions</h2>
-      <p className="mb-4 text-xs text-slate-400">
-        Permanently delete all transactions for a financial year. This cannot be undone.
-      </p>
+    <div>
 
       {/* ── Idle ── */}
       {stage === 'idle' && (
@@ -163,6 +159,6 @@ export function ResetSection() {
           </div>
         </div>
       )}
-    </section>
+    </div>
   );
 }

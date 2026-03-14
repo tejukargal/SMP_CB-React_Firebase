@@ -146,9 +146,7 @@ export function SalaryEntrySection() {
   };
 
   return (
-    <section>
-      <h2 className="mb-3 text-sm font-semibold text-slate-700">Quick Salary Entry</h2>
-
+    <div>
       <div className="rounded-lg border border-slate-200 bg-white overflow-clip">
 
         {/* ── Shared fields ── */}
@@ -310,6 +308,6 @@ export function SalaryEntrySection() {
         </div>
 
       </div>
-    </section>
+    </div>
   );
 }
