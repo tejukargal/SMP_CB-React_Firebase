@@ -411,7 +411,7 @@ const DateGroupedView = memo(function DateGroupedView({
 
 export function EntryList({ entries, loading, refreshing, error }: EntryListProps) {
   const [filters, setFilters] = useState<FilterState>(INIT_FILTERS);
-  const [viewMode, setViewMode] = useState<ViewMode>('split');
+  const [viewMode, setViewMode] = useState<ViewMode>('date');
   const { settings } = useSettings();
 
   const cycleView = () =>
