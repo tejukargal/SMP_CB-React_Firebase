@@ -144,7 +144,7 @@ function LedgerRow({ entry }: { entry: Entry }) {
   return (
     <>
       <tr
-        onClick={() => setDetailOpen(true)}
+        onDoubleClick={() => setDetailOpen(true)}
         className={`hover:bg-slate-50 cursor-pointer transition-colors
           ${hasNotes ? '' : 'border-b border-slate-100'}`}
       >
@@ -166,7 +166,7 @@ function LedgerRow({ entry }: { entry: Entry }) {
 
       {hasNotes && (
         <tr
-          onClick={() => setDetailOpen(true)}
+          onDoubleClick={() => setDetailOpen(true)}
           className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
         >
           <td colSpan={4} className="pb-2 pt-0 pl-4 pr-4 overflow-hidden">

@@ -7,18 +7,18 @@ import type { Entry } from '@smp-cashbook/shared';
 
 export const RECEIPT_SALARY_HEADS = [
   'Govt Salary Grants',
-  'Lic',
   'I Tax',
   'P Tax',
+  'Lic',
   'Gslic',
   'Fbf',
 ] as const;
 
 export const PAYMENT_SALARY_HEADS = [
   'Govt Salary Acct',
-  'Lic',
   'I Tax',
   'P Tax',
+  'Lic',
   'Gslic',
   'Fbf',
 ] as const;
@@ -26,17 +26,17 @@ export const PAYMENT_SALARY_HEADS = [
 // Short labels for table column headers
 export const RECEIPT_LABELS: Record<string, string> = {
   'Govt Salary Grants': 'Govt Salary',
-  'Lic':   'LIC',
   'I Tax': 'I Tax',
   'P Tax': 'P Tax',
+  'Lic':   'LIC',
   'Gslic': 'GSLIC',
   'Fbf':   'FBF',
 };
 export const PAYMENT_LABELS: Record<string, string> = {
   'Govt Salary Acct': 'Salary Acct',
-  'Lic':   'LIC',
   'I Tax': 'I Tax',
   'P Tax': 'P Tax',
+  'Lic':   'LIC',
   'Gslic': 'GSLIC',
   'Fbf':   'FBF',
 };

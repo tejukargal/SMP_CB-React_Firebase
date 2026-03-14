@@ -277,6 +277,27 @@ function DateGroupPanel({
   );
 }
 
+// ── Head-of-account sort order within a date group ───────────────────────────
+
+const RECEIPT_HEAD_ORDER: string[] = [
+  // Fee entries
+  'Adm Fee', 'Tution Fee', 'Rr Fee', 'Ass Fee', 'Sports Fee',
+  'Mag Fee', 'Id Fee', 'Lib Fee', 'Lab Fee', 'Dvp Fee',
+  'Swf Fee', 'Twf Fee', 'Nss Fee', 'Fine',
+  // Salary receipt entries
+  'Govt Salary Grants', 'I Tax', 'P Tax', 'Lic', 'Gslic', 'Fbf',
+];
+
+const PAYMENT_HEAD_ORDER: string[] = [
+  // Salary payment entries
+  'Govt Salary Acct', 'I Tax', 'P Tax', 'Lic', 'Gslic', 'Fbf',
+];
+
+function headRank(order: string[], head: string): number {
+  const idx = order.findIndex(h => h.toLowerCase() === head.toLowerCase());
+  return idx === -1 ? order.length : idx;
+}
+
 const DateGroupedView = memo(function DateGroupedView({
   entries,
   loading,
@@ -328,8 +349,12 @@ const DateGroupedView = memo(function DateGroupedView({
   return (
     <div className="flex flex-col gap-5">
       {groupsWithBalance.map(({ date, dateEntries, openingBalance, closingBalance }) => {
-        const receipts = dateEntries.filter((e) => e.type === 'Receipt');
-        const payments = dateEntries.filter((e) => e.type === 'Payment');
+        const receipts = dateEntries
+          .filter((e) => e.type === 'Receipt')
+          .sort((a, b) => headRank(RECEIPT_HEAD_ORDER, a.headOfAccount) - headRank(RECEIPT_HEAD_ORDER, b.headOfAccount));
+        const payments = dateEntries
+          .filter((e) => e.type === 'Payment')
+          .sort((a, b) => headRank(PAYMENT_HEAD_ORDER, a.headOfAccount) - headRank(PAYMENT_HEAD_ORDER, b.headOfAccount));
         const dayR = receipts.reduce((s, e) => s + e.amount, 0);
         const dayP = payments.reduce((s, e) => s + e.amount, 0);
         const receiptGrandTotal = openingBalance + dayR;

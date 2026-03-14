@@ -5,6 +5,7 @@ import { errorHandler } from './middleware/errorHandler';
 import entryRoutes from './routes/entryRoutes';
 import settingsRoutes from './routes/settingsRoutes';
 import importRoutes from './routes/importRoutes';
+import bankBalanceRoutes from './routes/bankBalanceRoutes';
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 app.use('/api/entries', authMiddleware, entryRoutes);
 app.use('/api/settings', authMiddleware, settingsRoutes);
 app.use('/api/import', authMiddleware, importRoutes);
+app.use('/api/bank-balances', authMiddleware, bankBalanceRoutes);
 
 app.use(errorHandler);
 
