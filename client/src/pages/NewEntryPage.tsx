@@ -342,7 +342,7 @@ export function NewEntryPage() {
               type="text"
               placeholder=""
               value={form.chequeNo}
-              onChange={(e) => set('chequeNo', e.target.value)}
+              onChange={(e) => set('chequeNo', toProperCase(e.target.value))}
               error={errors.chequeNo}
             />
           </div>
