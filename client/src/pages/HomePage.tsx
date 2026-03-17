@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useDashboardData, type LedgerTickerItem } from '@/hooks/useDashboardData';
 import { formatCurrency } from '@/utils/formatCurrency';
 import { formatDate } from '@/utils/formatDate';
+import { apiGetBankOpeningBalances } from '@/api/bankBalances';
 import type { Entry } from '@smp-cashbook/shared';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -50,6 +51,20 @@ function buildTickerItems(entries: Entry[], fy: string): LedgerTickerItem[] {
     map.set(key, prev);
   }
   return Array.from(map.values()).filter(i => i.receipts > 0 || i.payments > 0);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bank account definitions (mirrors BankAccountsPage)
+// ─────────────────────────────────────────────────────────────────────────────
+const BANK_HEADS = [
+  { key: 'sbi_ppl',          headOfAccount: 'Sbi Ppl',          label: 'SBI PPL Account'            },
+  { key: 'can_bank_pd',      headOfAccount: 'Can Bank Pd',       label: 'Canara Bank PD Account'     },
+  { key: 'can_bank_scholar', headOfAccount: 'Can Bank Scholor',  label: 'Canara Bank Scholar Account' },
+] as const;
+
+function findBankDef(head: string) {
+  const h = head.toLowerCase().trim();
+  return BANK_HEADS.find(b => b.headOfAccount.toLowerCase() === h);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -421,6 +436,115 @@ function YearRow({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Bank account search result — Opening / Debit / Credit / Closing per FY
+// ─────────────────────────────────────────────────────────────────────────────
+function BankSearchResult({ group }: { group: SearchGroup }) {
+  const bankDef = findBankDef(group.head)!;
+  const fyKey   = group.years.map(y => y.fy).join('|');
+
+  const [openingBals, setOpeningBals] = useState<Map<string, number>>(new Map());
+  const [bLoading,    setBLoading]    = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setBLoading(true);
+    Promise.all(
+      group.years.map(y =>
+        apiGetBankOpeningBalances(y.fy).then(data => ({ fy: y.fy, val: (data[bankDef.key] ?? 0) as number })),
+      ),
+    )
+      .then(results => {
+        if (cancelled) return;
+        const map = new Map<string, number>();
+        for (const { fy, val } of results) map.set(fy, val);
+        setOpeningBals(map);
+      })
+      .catch(console.error)
+      .finally(() => { if (!cancelled) setBLoading(false); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fyKey, bankDef.key]);
+
+  return (
+    <div>
+      {/* Head label */}
+      <div className="flex items-center gap-2 mb-2">
+        <svg className="h-3.5 w-3.5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+        </svg>
+        <span className="text-sm font-semibold text-slate-700">{group.head}</span>
+        <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+          {bankDef.label}
+        </span>
+        <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+          {group.years.length} yr{group.years.length !== 1 ? 's' : ''}
+        </span>
+        <div className="h-px flex-1 bg-slate-100" />
+      </div>
+
+      <div className="overflow-x-auto overflow-hidden rounded-xl border border-slate-200">
+        <table className="w-full min-w-[460px]">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50">
+              <th className="py-2 pl-4 pr-3 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-400">FY</th>
+              <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-blue-400">Opening Bal</th>
+              <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-green-500">Total Debit</th>
+              <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-red-400">Total Credit</th>
+              <th className="pl-3 pr-4 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-500">Closing Bal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {group.years.map(year => {
+              const openingBal  = openingBals.get(year.fy) ?? 0;
+              const totalDebit  = year.aided.receipts  + year.unAided.receipts;   // Receipt = withdrawal = Debit
+              const totalCredit = year.aided.payments  + year.unAided.payments;   // Payment = deposit = Credit
+              const closingBal  = openingBal + totalCredit - totalDebit;
+              return (
+                <tr
+                  key={year.fy}
+                  className={`border-b border-slate-100 last:border-0 ${year.isActive ? 'bg-blue-50/20' : ''}`}
+                >
+                  <td className="py-2 pl-4 pr-3 whitespace-nowrap">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-xs font-semibold ${year.isActive ? 'text-blue-700' : 'text-slate-700'}`}>
+                        {year.fy}
+                      </span>
+                      {year.isActive && (
+                        <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] font-semibold text-blue-600 leading-none">
+                          Active
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right text-xs font-medium text-blue-700 whitespace-nowrap">
+                    {bLoading ? <span className="text-slate-300">…</span> : formatCurrency(openingBal)}
+                  </td>
+                  <td className="px-3 py-2 text-right text-xs font-medium text-green-700 whitespace-nowrap">
+                    {formatCurrency(totalDebit)}
+                  </td>
+                  <td className="px-3 py-2 text-right text-xs font-medium text-red-600 whitespace-nowrap">
+                    {formatCurrency(totalCredit)}
+                  </td>
+                  <td className={`pl-3 pr-4 py-2 text-right text-xs font-bold whitespace-nowrap ${
+                    closingBal >= 0 ? 'text-slate-800' : 'text-orange-700'
+                  }`}>
+                    {bLoading
+                      ? <span className="text-slate-300">…</span>
+                      : <>{formatCurrency(Math.abs(closingBal))}{closingBal < 0 ? ' Dr' : ''}</>
+                    }
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function SearchResultGroup({
   group, onOpenModal,
 }: { group: SearchGroup; onOpenModal: (head: string, fy: string) => void }) {
@@ -684,13 +808,17 @@ export function HomePage() {
           {/* Results list */}
           {searchResults.length > 0 ? (
             <div className="flex flex-col gap-6">
-              {searchResults.map(group => (
-                <SearchResultGroup
-                  key={group.head}
-                  group={group}
-                  onOpenModal={(head, fy) => setModalLedger({ head, fy })}
-                />
-              ))}
+              {searchResults.map(group =>
+                findBankDef(group.head) ? (
+                  <BankSearchResult key={group.head} group={group} />
+                ) : (
+                  <SearchResultGroup
+                    key={group.head}
+                    group={group}
+                    onOpenModal={(head, fy) => setModalLedger({ head, fy })}
+                  />
+                ),
+              )}
             </div>
           ) : !aL && !hL && (
             /* Empty state */
