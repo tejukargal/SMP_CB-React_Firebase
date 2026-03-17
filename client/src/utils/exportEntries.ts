@@ -556,3 +556,147 @@ export function exportLedgerExcel(
   const safeName = head.replace(/[^a-z0-9]/gi, '_');
   XLSX.writeFile(wb, `ledger-${safeName}-${financialYear.replace('/', '-')}.xlsx`);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BANK STATEMENT PDF + EXCEL
+//
+// Columns (6): Date | Narration | Cheque No | Debit (Receipt) | Credit (Payment) | Balance
+// PDF widths (=277mm): 22 + 125 + 28 + 34 + 34 + 34
+// Title: 2 lines only — bank name/type on line 1, FY + balances + date on line 2
+// ─────────────────────────────────────────────────────────────────────────────
+export interface BankStatementExportParams {
+  bankLabel:      string;
+  financialYear:  string;
+  openingBalance: number;
+  openingDateStr: string;   // e.g. "01 Apr 2025"
+  rows: Array<{
+    date:      string;
+    narration: string;
+    chequeNo:  string;
+    debit:     number;
+    credit:    number;
+    balance:   number;
+  }>;
+  totalDebit:     number;
+  totalCredit:    number;
+  closingBalance: number;
+}
+
+export function exportBankStatementPDF(p: BankStatementExportParams) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+  // ── Two-line centred header ──
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.text(`${p.bankLabel} — Bank Statement`, PAGE_CX, 11, { align: 'center' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  const cbStr = `${fmtAmt(Math.abs(p.closingBalance))}${p.closingBalance < 0 ? ' Dr' : ''}`;
+  doc.text(
+    `FY: ${p.financialYear}   |   Opening Balance: ${fmtAmt(p.openingBalance)}   |   Closing Balance: ${cbStr}   |   Generated: ${new Date().toLocaleDateString('en-IN')}`,
+    PAGE_CX, 17, { align: 'center' },
+  );
+  doc.setTextColor(0, 0, 0);
+
+  const C_OB_BG: RGB = [219, 234, 254]; // blue-100
+  const C_OB_FG: RGB = [30,  64,  175]; // blue-800
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const body: any[] = [
+    // Opening balance row
+    [p.openingDateStr, 'Opening Balance', '', '—', fmtAmt(p.openingBalance), fmtAmt(p.openingBalance)],
+    // Transaction rows
+    ...p.rows.map(r => [
+      formatDate(r.date),
+      r.narration,
+      r.chequeNo,
+      r.debit  > 0 ? fmtAmt(r.debit)  : '—',
+      r.credit > 0 ? fmtAmt(r.credit) : '—',
+      `${fmtAmt(Math.abs(r.balance))}${r.balance < 0 ? ' Dr' : ''}`,
+    ]),
+    // Totals row
+    [`${p.rows.length} transaction${p.rows.length !== 1 ? 's' : ''}`, '', '',
+      fmtAmt(p.totalDebit), fmtAmt(p.totalCredit), cbStr],
+  ];
+  const TOTAL_IDX = body.length - 1;
+
+  autoTable(doc, {
+    startY:     22,
+    margin:     { left: MARGIN, right: MARGIN },
+    tableWidth: 277,
+    head: [['Date', 'Narration', 'Cheque No', 'Debit\n(Receipt)', 'Credit\n(Payment)', 'Balance']],
+    body,
+    styles:     BASE,
+    headStyles: { ...HEAD_S, minCellHeight: 10 },
+    columnStyles: {
+      0: { cellWidth: 22 },
+      1: { cellWidth: 125, overflow: 'ellipsize' as const },
+      2: { cellWidth: 28 },
+      3: { cellWidth: 34, halign: 'right' },
+      4: { cellWidth: 34, halign: 'right' },
+      5: { cellWidth: 34, halign: 'right' },
+    },
+    didParseCell: (data) => {
+      if (data.section !== 'body') return;
+      const idx = data.row.index;
+      data.cell.styles.fillColor = C_WHITE;
+      if (idx === 0) {
+        data.cell.styles.fillColor = C_OB_BG;
+        data.cell.styles.textColor = C_OB_FG;
+        data.cell.styles.fontStyle = 'bold';
+      } else if (idx === TOTAL_IDX) {
+        data.cell.styles.fillColor = C_TOTAL;
+        data.cell.styles.fontStyle = 'bold';
+      }
+    },
+  });
+
+  const safeName = p.bankLabel.toLowerCase().replace(/\s+/g, '-');
+  doc.save(`bank-statement-${safeName}-${p.financialYear.replace('/', '-')}.pdf`);
+}
+
+export function exportBankStatementExcel(p: BankStatementExportParams) {
+  const cbStr = `${fmtAmt(Math.abs(p.closingBalance))}${p.closingBalance < 0 ? ' Dr' : ''}`;
+
+  const wsData: (string | number)[][] = [
+    [`${p.bankLabel} — Bank Statement`],
+    [`FY: ${p.financialYear}   |   Opening Balance: ${fmtAmt(p.openingBalance)}   |   Closing Balance: ${cbStr}   |   Generated: ${new Date().toLocaleDateString('en-IN')}`],
+    [],
+    ['Date', 'Narration', 'Cheque No', 'Debit (Receipt)', 'Credit (Payment)', 'Balance'],
+    [p.openingDateStr, 'Opening Balance', '', '', p.openingBalance, p.openingBalance],
+    ...p.rows.map(r => [
+      formatDate(r.date),
+      r.narration,
+      r.chequeNo,
+      r.debit  > 0 ? r.debit  : '',
+      r.credit > 0 ? r.credit : '',
+      r.balance,
+    ]),
+    [],
+    [`${p.rows.length} transaction${p.rows.length !== 1 ? 's' : ''}`, '', '',
+      p.totalDebit, p.totalCredit, p.closingBalance],
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols'] = [
+    { wch: 14 },  // Date
+    { wch: 45 },  // Narration
+    { wch: 16 },  // Cheque No
+    { wch: 18 },  // Debit
+    { wch: 18 },  // Credit
+    { wch: 18 },  // Balance
+  ];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (ws as any)['!pageSetup'] = {
+    orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9,
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (ws as any)['!margins'] = { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 };
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Bank Statement');
+  const safeName = p.bankLabel.toLowerCase().replace(/\s+/g, '-');
+  XLSX.writeFile(wb, `bank-statement-${safeName}-${p.financialYear.replace('/', '-')}.xlsx`);
+}

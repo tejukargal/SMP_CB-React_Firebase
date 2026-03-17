@@ -115,6 +115,32 @@ export async function deleteEntry(
   await col.doc(entryId).delete();
 }
 
+/**
+ * Rename headOfAccount across all matching entries in batches.
+ * cashBookTypes can be ['Aided'], ['Un-Aided'], or both.
+ */
+export async function renameHeadOfAccount(
+  financialYear: string,
+  cashBookTypes: string[],
+  oldName: string,
+  newName: string,
+): Promise<number> {
+  let totalUpdated = 0;
+  for (const cbt of cashBookTypes) {
+    const col  = entryCollection(financialYear, cbt);
+    const snap = await col.where('headOfAccount', '==', oldName).get();
+    if (snap.empty) continue;
+    // Firestore batch limit is 500 writes
+    for (let i = 0; i < snap.docs.length; i += 500) {
+      const batch = db.batch();
+      snap.docs.slice(i, i + 500).forEach((d) => batch.update(d.ref, { headOfAccount: newName }));
+      await batch.commit();
+    }
+    totalUpdated += snap.docs.length;
+  }
+  return totalUpdated;
+}
+
 /** Delete every entry for a specific financial year + cash-book type, in batches. */
 export async function resetEntriesForFY(
   financialYear: string,

@@ -439,7 +439,7 @@ function YearRow({
 // ─────────────────────────────────────────────────────────────────────────────
 // Bank account search result — Opening / Debit / Credit / Closing per FY
 // ─────────────────────────────────────────────────────────────────────────────
-function BankSearchResult({ group }: { group: SearchGroup }) {
+function BankSearchResult({ group, onOpenModal }: { group: SearchGroup; onOpenModal: (head: string, fy: string) => void }) {
   const bankDef = findBankDef(group.head)!;
   const fyKey   = group.years.map(y => y.fy).join('|');
 
@@ -504,7 +504,8 @@ function BankSearchResult({ group }: { group: SearchGroup }) {
               return (
                 <tr
                   key={year.fy}
-                  className={`border-b border-slate-100 last:border-0 ${year.isActive ? 'bg-blue-50/20' : ''}`}
+                  onDoubleClick={() => onOpenModal(group.head, year.fy)}
+                  className={`border-b border-slate-100 last:border-0 cursor-pointer select-none transition-colors hover:bg-blue-50/50 ${year.isActive ? 'bg-blue-50/20' : ''}`}
                 >
                   <td className="py-2 pl-4 pr-3 whitespace-nowrap">
                     <div className="flex items-center gap-1.5">
@@ -810,7 +811,7 @@ export function HomePage() {
             <div className="flex flex-col gap-6">
               {searchResults.map(group =>
                 findBankDef(group.head) ? (
-                  <BankSearchResult key={group.head} group={group} />
+                  <BankSearchResult key={group.head} group={group} onOpenModal={(head, fy) => setModalLedger({ head, fy })} />
                 ) : (
                   <SearchResultGroup
                     key={group.head}

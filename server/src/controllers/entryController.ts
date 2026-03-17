@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { createEntry, getEntries, deleteEntry, updateEntry, resetEntriesForFY } from '../services/entryService';
+import { createEntry, getEntries, deleteEntry, updateEntry, resetEntriesForFY, renameHeadOfAccount } from '../services/entryService';
 import { toProperCase } from '@smp-cashbook/shared';
 import type { CreateEntryPayload } from '@smp-cashbook/shared';
 
@@ -104,6 +104,32 @@ export async function handleUpdateEntry(
 
     const entry = await updateEntry(id, fyParam, typeParam, fields);
     res.json({ data: entry, message: 'Entry updated' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function handleRenameHead(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { financialYear, cashBookTypes, oldName, newName } =
+      req.body as { financialYear?: string; cashBookTypes?: unknown; oldName?: string; newName?: string };
+
+    if (!financialYear) { res.status(400).json({ error: 'financialYear is required' }); return; }
+    if (!Array.isArray(cashBookTypes) || cashBookTypes.length === 0) {
+      res.status(400).json({ error: 'cashBookTypes must be a non-empty array' }); return;
+    }
+    if (!oldName?.trim()) { res.status(400).json({ error: 'oldName is required' }); return; }
+    if (!newName?.trim()) { res.status(400).json({ error: 'newName is required' }); return; }
+
+    const formatted = toProperCase(newName.trim());
+    if (formatted === oldName) { res.json({ data: { updated: 0 }, message: 'No change' }); return; }
+
+    const updated = await renameHeadOfAccount(financialYear, cashBookTypes as string[], oldName, formatted);
+    res.json({ data: { updated }, message: `Renamed "${oldName}" → "${formatted}" across ${updated} entries` });
   } catch (err) {
     next(err);
   }

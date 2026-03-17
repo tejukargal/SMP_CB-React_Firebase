@@ -58,6 +58,18 @@ export interface ImportResult {
   failed: number;
 }
 
+export async function apiRenameHead(
+  financialYear: string,
+  cashBookTypes: string[],
+  oldName: string,
+  newName: string,
+): Promise<{ updated: number }> {
+  const res = await apiClient.post<ApiResponse<{ updated: number }>>('/api/entries/rename-head', {
+    financialYear, cashBookTypes, oldName, newName,
+  });
+  return res.data.data;
+}
+
 export async function apiImportEntries(
   entries: CreateEntryPayload[]
 ): Promise<ImportResult> {

@@ -6,6 +6,7 @@ import { formatCurrency } from '@/utils/formatCurrency';
 import { formatDate } from '@/utils/formatDate';
 import { apiGetBankOpeningBalances, apiSetBankOpeningBalance } from '@/api/bankBalances';
 import { EntrySkeleton } from '@/components/entries/EntrySkeleton';
+import { exportBankStatementPDF, exportBankStatementExcel } from '@/utils/exportEntries';
 import type { Entry } from '@smp-cashbook/shared';
 
 // ── Bank account definitions ──────────────────────────────────────────────────
@@ -194,7 +195,13 @@ function StatementTable({
         .filter((e) => matchesBankHead(e.headOfAccount, bank.headOfAccount))
         .sort((a, b) => {
           if (a.date !== b.date) return a.date.localeCompare(b.date);
-          return a.createdAt.localeCompare(b.createdAt);
+          // Within same date: Credits (Payment) before Debits (Receipt),
+          // and among Credits sort highest first — avoids interim negative balance.
+          const aCredit = a.type === 'Payment' ? 1 : 0;
+          const bCredit = b.type === 'Payment' ? 1 : 0;
+          if (aCredit !== bCredit) return bCredit - aCredit;
+          if (aCredit === 1) return b.amount - a.amount; // largest credit first
+          return a.amount - b.amount;                    // smallest debit first
         }),
     [entries, bank.headOfAccount],
   );
@@ -222,6 +229,20 @@ function StatementTable({
   const totalCredit    = useMemo(() => rows.reduce((s, r) => s + r.credit, 0), [rows]);
   const closingBalance = openingBalance + totalCredit - totalDebit;
 
+  const exportParams = useMemo(() => ({
+    bankLabel:      bank.label,
+    financialYear,
+    openingBalance,
+    openingDateStr: openingDateLabel(financialYear),
+    rows: rows.map(r => ({
+      date: r.date, narration: r.narration, chequeNo: r.chequeNo,
+      debit: r.debit, credit: r.credit, balance: r.balance,
+    })),
+    totalDebit,
+    totalCredit,
+    closingBalance,
+  }), [bank.label, financialYear, openingBalance, rows, totalDebit, totalCredit, closingBalance]);
+
   const theadBg     = THEAD_BG[bank.color];
   const theadBorder = THEAD_BORDER[bank.color];
 
@@ -237,16 +258,47 @@ function StatementTable({
           value={openingBalance}
           onSaved={(bal) => onOpeningBalanceChange(bank.key, bal)}
         />
-        {/* Closing balance mini chip */}
-        <div className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 ${
-          closingBalance >= 0 ? 'border-blue-200 bg-blue-50' : 'border-orange-200 bg-orange-50'
-        }`}>
-          <span className={`text-xs ${closingBalance >= 0 ? 'text-blue-500' : 'text-orange-500'}`}>
-            Closing Balance
-          </span>
-          <span className={`text-xs font-semibold ${closingBalance >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
-            {formatCurrency(Math.abs(closingBalance))}{closingBalance < 0 ? ' Dr' : ''}
-          </span>
+        {/* Right-side: closing balance + export buttons */}
+        <div className="flex items-center gap-2">
+          {/* Closing balance mini chip */}
+          <div className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 ${
+            closingBalance >= 0 ? 'border-blue-200 bg-blue-50' : 'border-orange-200 bg-orange-50'
+          }`}>
+            <span className={`text-xs ${closingBalance >= 0 ? 'text-blue-500' : 'text-orange-500'}`}>
+              Closing Balance
+            </span>
+            <span className={`text-xs font-semibold ${closingBalance >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
+              {formatCurrency(Math.abs(closingBalance))}{closingBalance < 0 ? ' Dr' : ''}
+            </span>
+          </div>
+
+          {/* Export buttons */}
+          <button
+            onClick={() => exportBankStatementPDF(exportParams)}
+            className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1
+              text-xs font-medium text-slate-600 hover:border-red-300 hover:text-red-600
+              hover:bg-red-50 transition-colors whitespace-nowrap"
+            title="Export as PDF"
+          >
+            <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+            PDF
+          </button>
+          <button
+            onClick={() => exportBankStatementExcel(exportParams)}
+            className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1
+              text-xs font-medium text-slate-600 hover:border-green-300 hover:text-green-700
+              hover:bg-green-50 transition-colors whitespace-nowrap"
+            title="Export as Excel"
+          >
+            <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M3 10h18M3 6h18M3 14h18M3 18h18" />
+            </svg>
+            Excel
+          </button>
         </div>
       </div>
 
