@@ -1,10 +1,13 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { collection, getDocs } from 'firebase/firestore';
+import { firestore } from '@/firebase';
 import { useEntries } from '@/hooks/useEntries';
 import { useSettings } from '@/context/SettingsContext';
 import { useAuth } from '@/context/AuthContext';
 import { useDashboardData, type LedgerTickerItem } from '@/hooks/useDashboardData';
 import { formatCurrency } from '@/utils/formatCurrency';
+import { formatDate } from '@/utils/formatDate';
 import type { Entry } from '@smp-cashbook/shared';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -140,9 +143,9 @@ function StatCard({
 }) {
   const c = C_MAP[color];
   return (
-    <div className={`rounded-xl border ${c.border} ${c.bg} px-4 py-3.5`}>
-      <p className={`text-xs font-medium ${c.label}`}>{label}</p>
-      <p className={`mt-1 text-[1.3rem] font-bold leading-tight tracking-tight ${c.val}`}>
+    <div className={`rounded-xl border ${c.border} ${c.bg} px-4 py-3`}>
+      <p className={`text-[11px] font-medium ${c.label}`}>{label}</p>
+      <p className={`mt-1 text-lg font-bold leading-tight tracking-tight ${c.val}`}>
         {isCount ? value.toLocaleString('en-IN') : formatCurrency(value)}
       </p>
     </div>
@@ -163,56 +166,22 @@ function TypeRow({
   const bal = receipts - payments;
   return (
     <div className={`rounded-xl border ${c.wrap} px-4 py-3`}>
-      <div className="flex items-center justify-between mb-2.5">
-        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${c.badge}`}>{label}</span>
-        <span className="text-xs text-slate-400">{count.toLocaleString('en-IN')} entries</span>
+      <div className="flex items-center justify-between mb-2">
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${c.badge}`}>{label}</span>
+        <span className="text-[11px] text-slate-400">{count.toLocaleString('en-IN')} entries</span>
       </div>
       <div className="grid grid-cols-3 gap-3">
         <div>
-          <p className="text-xs text-green-600 mb-0.5">Receipts</p>
-          <p className="text-sm font-semibold text-green-700">{formatCurrency(receipts)}</p>
-        </div>
-        <div>
-          <p className="text-xs text-red-500 mb-0.5">Payments</p>
-          <p className="text-sm font-semibold text-red-600">{formatCurrency(payments)}</p>
-        </div>
-        <div>
-          <p className="text-xs text-blue-600 mb-0.5">Balance</p>
-          <p className={`text-sm font-semibold ${bal >= 0 ? 'text-blue-700' : 'text-amber-700'}`}>
-            {formatCurrency(Math.abs(bal))}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Search result components
-// ─────────────────────────────────────────────────────────────────────────────
-function AmountRow({
-  label, labelCls, receipts, payments,
-}: {
-  label: string; labelCls: string; receipts: number; payments: number;
-}) {
-  const bal = receipts - payments;
-  return (
-    <div>
-      <p className={`mb-1.5 text-[10px] font-semibold uppercase tracking-wider ${labelCls}`}>
-        {label}
-      </p>
-      <div className="grid grid-cols-3 gap-2">
-        <div>
-          <p className="text-[10px] text-slate-400">Receipts</p>
+          <p className="text-[11px] text-green-600 mb-0.5">Receipts</p>
           <p className="text-xs font-semibold text-green-700">{formatCurrency(receipts)}</p>
         </div>
         <div>
-          <p className="text-[10px] text-slate-400">Payments</p>
+          <p className="text-[11px] text-red-500 mb-0.5">Payments</p>
           <p className="text-xs font-semibold text-red-600">{formatCurrency(payments)}</p>
         </div>
         <div>
-          <p className="text-[10px] text-slate-400">Balance</p>
-          <p className={`text-xs font-semibold ${bal >= 0 ? 'text-blue-700' : 'text-amber-600'}`}>
+          <p className="text-[11px] text-blue-600 mb-0.5">Balance</p>
+          <p className={`text-xs font-semibold ${bal >= 0 ? 'text-blue-700' : 'text-amber-700'}`}>
             {formatCurrency(Math.abs(bal))}
           </p>
         </div>
@@ -221,75 +190,282 @@ function AmountRow({
   );
 }
 
-function YearCard({ year }: { year: YearData }) {
-  const { fy, isActive, aided, unAided } = year;
-  const hasAided   = aided.receipts > 0   || aided.payments > 0;
-  const hasUnAided = unAided.receipts > 0 || unAided.payments > 0;
-  const hasBoth    = hasAided && hasUnAided;
-  const totalR     = aided.receipts  + unAided.receipts;
-  const totalP     = aided.payments  + unAided.payments;
+// ─────────────────────────────────────────────────────────────────────────────
+// Ledger Detail Modal
+// ─────────────────────────────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function docToEntry(doc: { id: string; data(): Record<string, any> }, cashBookType: string): Entry {
+  const d = doc.data();
+  return {
+    id:            doc.id,
+    date:          d.date          ?? '',
+    chequeNo:      d.chequeNo      ?? '',
+    amount:        d.amount        ?? 0,
+    headOfAccount: d.headOfAccount ?? '',
+    notes:         d.notes         ?? '',
+    type:          d.type          ?? 'Receipt',
+    financialYear: d.financialYear ?? '',
+    cashBookType:  cashBookType    as 'Aided' | 'Un-Aided',
+    createdAt:     d.createdAt     ?? '',
+    voucherNo:     d.voucherNo,
+  };
+}
+
+function LedgerDetailModal({
+  head, fy, onClose,
+}: { head: string; fy: string; onClose: () => void }) {
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+
+    (async () => {
+      try {
+        const [aidedSnap, unAidedSnap] = await Promise.all([
+          getDocs(collection(firestore, 'entries', fy, 'Aided')),
+          getDocs(collection(firestore, 'entries', fy, 'Un-Aided')),
+        ]);
+        if (cancelled) return;
+        const all = [
+          ...aidedSnap.docs.map(d => docToEntry(d, 'Aided')),
+          ...unAidedSnap.docs.map(d => docToEntry(d, 'Un-Aided')),
+        ]
+          .filter(e => e.headOfAccount === head)
+          .sort((a, b) => a.date.localeCompare(b.date));
+        setEntries(all);
+      } catch (err) {
+        console.error('[LedgerDetailModal]', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [head, fy]);
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  const receipts = entries.filter(e => e.type === 'Receipt').reduce((s, e) => s + e.amount, 0);
+  const payments = entries.filter(e => e.type === 'Payment').reduce((s, e) => s + e.amount, 0);
+  const balance  = receipts - payments;
 
   return (
-    <div className={`rounded-xl border overflow-hidden transition-shadow hover:shadow-sm ${
-      isActive ? 'border-blue-200' : 'border-slate-200'
-    }`}>
-      {/* FY header */}
-      <div className={`flex items-center justify-between px-4 py-2.5 border-b ${
-        isActive
-          ? 'bg-blue-50 border-blue-100'
-          : 'bg-slate-50 border-slate-100'
-      }`}>
-        <span className="text-sm font-semibold text-slate-700">{fy}</span>
-        {isActive && (
-          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
-            Active
-          </span>
-        )}
-      </div>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-fade-in">
 
-      {/* Body */}
-      <div className="space-y-3 p-4">
-        {hasAided && (
-          <AmountRow
-            label="Aided" labelCls="text-teal-600"
-            receipts={aided.receipts} payments={aided.payments}
-          />
-        )}
-        {hasUnAided && (
-          <AmountRow
-            label="Un-Aided" labelCls="text-orange-600"
-            receipts={unAided.receipts} payments={unAided.payments}
-          />
-        )}
-        {hasBoth && (
-          <div className="border-t border-slate-100 pt-3">
-            <AmountRow
-              label="Total" labelCls="text-slate-500"
-              receipts={totalR} payments={totalP}
-            />
+        {/* Header */}
+        <div className="flex items-start justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <h2 className="text-sm font-bold text-slate-800">{head}</h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {fy}&nbsp;&middot;&nbsp;
+              {loading ? 'Loading…' : `${entries.length} transaction${entries.length !== 1 ? 's' : ''}`}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-slate-100 transition-colors"
+          >
+            <svg className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Summary strip */}
+        {!loading && entries.length > 0 && (
+          <div className="flex items-center gap-5 px-5 py-2.5 bg-slate-50 border-b border-slate-100 text-xs">
+            <span className="text-green-700">
+              Receipts <span className="font-bold">{formatCurrency(receipts)}</span>
+            </span>
+            <span className="text-red-600">
+              Payments <span className="font-bold">{formatCurrency(payments)}</span>
+            </span>
+            <span className={`font-bold ${balance >= 0 ? 'text-blue-700' : 'text-amber-600'}`}>
+              Balance {formatCurrency(Math.abs(balance))}
+            </span>
           </div>
         )}
+
+        {/* Body */}
+        <div className="overflow-y-auto flex-1">
+          {loading ? (
+            <div className="flex flex-col gap-2 p-5">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-9 rounded-lg animate-pulse bg-slate-100" />
+              ))}
+            </div>
+          ) : entries.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+              <svg className="h-7 w-7 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                  d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0120 9.414V19a2 2 0 01-2 2z" />
+              </svg>
+              <p className="text-sm text-slate-400">No transactions for this head in {fy}</p>
+            </div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-white border-b border-slate-100 shadow-sm">
+                <tr>
+                  <th className="py-2.5 pl-5 pr-3 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-400">Date</th>
+                  <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-400">Type</th>
+                  <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-400">Book</th>
+                  <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">Amount</th>
+                  <th className="pl-3 pr-5 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-400">Cheque</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((e, i) => {
+                  const rowBg = i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40';
+                  return (
+                    <>
+                      <tr key={e.id} className={`${rowBg} ${e.notes ? '' : 'border-b border-slate-50 last:border-0'}`}>
+                        <td className="py-2 pl-5 pr-3 font-medium text-slate-700 whitespace-nowrap">{formatDate(e.date)}</td>
+                        <td className="px-3 py-2">
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                            e.type === 'Receipt' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                          }`}>
+                            {e.type}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                            e.cashBookType === 'Aided' ? 'bg-teal-100 text-teal-700' : 'bg-orange-100 text-orange-700'
+                          }`}>
+                            {e.cashBookType}
+                          </span>
+                        </td>
+                        <td className={`px-3 py-2 text-right font-semibold whitespace-nowrap ${
+                          e.type === 'Receipt' ? 'text-green-700' : 'text-red-600'
+                        }`}>
+                          {formatCurrency(e.amount)}
+                        </td>
+                        <td className="pl-3 pr-5 py-2 text-slate-500">{e.chequeNo || <span className="text-slate-300">—</span>}</td>
+                      </tr>
+                      {e.notes && (
+                        <tr key={`${e.id}-notes`} className={`${rowBg} border-b border-slate-50 last:border-0`}>
+                          <td colSpan={5} className="pl-5 pr-5 pb-2 pt-0">
+                            <p className="text-[11px] text-slate-500 leading-relaxed whitespace-pre-wrap break-words">
+                              {e.notes}
+                            </p>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-function SearchResultGroup({ group }: { group: SearchGroup }) {
+// ─────────────────────────────────────────────────────────────────────────────
+// Search result — horizontal row table
+// ─────────────────────────────────────────────────────────────────────────────
+function YearRow({
+  year, onDblClick,
+}: { year: YearData; onDblClick: () => void }) {
+  const { fy, isActive, aided, unAided } = year;
+  const totalR = aided.receipts + unAided.receipts;
+  const totalP = aided.payments + unAided.payments;
+  const totalB = totalR - totalP;
+
+  const fmt = (v: number) => v > 0 ? formatCurrency(v) : <span className="text-slate-200">—</span>;
+
+  return (
+    <tr
+      onDoubleClick={onDblClick}
+      className={`border-b border-slate-100 last:border-0 cursor-pointer select-none
+        transition-colors hover:bg-blue-50/50
+        ${isActive ? 'bg-blue-50/20' : ''}`}
+      title="Double-click to view transactions"
+    >
+      {/* FY */}
+      <td className="py-2 pl-4 pr-3 whitespace-nowrap">
+        <div className="flex items-center gap-1.5">
+          <span className={`text-xs font-semibold ${isActive ? 'text-blue-700' : 'text-slate-700'}`}>{fy}</span>
+          {isActive && (
+            <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] font-semibold text-blue-600 leading-none">
+              Active
+            </span>
+          )}
+        </div>
+      </td>
+      {/* Aided */}
+      <td className="px-2 py-2 text-right text-xs text-green-700 whitespace-nowrap">{fmt(aided.receipts)}</td>
+      <td className="px-2 py-2 text-right text-xs text-red-600 whitespace-nowrap">{fmt(aided.payments)}</td>
+      {/* Un-Aided */}
+      <td className="px-2 py-2 text-right text-xs text-green-700 whitespace-nowrap">{fmt(unAided.receipts)}</td>
+      <td className="px-2 py-2 text-right text-xs text-red-600 whitespace-nowrap">{fmt(unAided.payments)}</td>
+      {/* Total */}
+      <td className="px-2 py-2 text-right text-xs font-semibold text-green-700 whitespace-nowrap">{formatCurrency(totalR)}</td>
+      <td className="px-2 py-2 text-right text-xs font-semibold text-red-600 whitespace-nowrap">{formatCurrency(totalP)}</td>
+      <td className={`pl-2 pr-4 py-2 text-right text-xs font-bold whitespace-nowrap ${totalB >= 0 ? 'text-blue-700' : 'text-amber-600'}`}>
+        {formatCurrency(Math.abs(totalB))}
+      </td>
+    </tr>
+  );
+}
+
+function SearchResultGroup({
+  group, onOpenModal,
+}: { group: SearchGroup; onOpenModal: (head: string, fy: string) => void }) {
   return (
     <div>
       {/* Head label */}
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-2">
         <span className="text-sm font-semibold text-slate-700">{group.head}</span>
-        <span className="text-xs text-slate-400">
-          {group.years.length} year{group.years.length !== 1 ? 's' : ''}
+        <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+          {group.years.length} yr{group.years.length !== 1 ? 's' : ''}
         </span>
         <div className="h-px flex-1 bg-slate-100" />
+        <span className="text-[10px] italic text-slate-400">double-click row to view</span>
       </div>
-      {/* Two-column year grid */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {group.years.map(year => (
-          <YearCard key={year.fy} year={year} />
-        ))}
+
+      <div className="overflow-x-auto overflow-hidden rounded-xl border border-slate-200">
+        <table className="w-full min-w-[540px]">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50">
+              <th className="py-2 pl-4 pr-3 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-400">FY</th>
+              <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-teal-500" colSpan={2}>Aided</th>
+              <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-orange-500" colSpan={2}>Un-Aided</th>
+              <th className="pl-2 pr-4 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400" colSpan={3}>Total</th>
+            </tr>
+            <tr className="border-b border-slate-100 bg-slate-50/50">
+              <th className="py-1 pl-4 pr-3" />
+              <th className="px-2 py-1 text-right text-[10px] font-medium text-green-500">R</th>
+              <th className="px-2 py-1 text-right text-[10px] font-medium text-red-400">P</th>
+              <th className="px-2 py-1 text-right text-[10px] font-medium text-green-500">R</th>
+              <th className="px-2 py-1 text-right text-[10px] font-medium text-red-400">P</th>
+              <th className="px-2 py-1 text-right text-[10px] font-medium text-green-500">R</th>
+              <th className="px-2 py-1 text-right text-[10px] font-medium text-red-400">P</th>
+              <th className="pl-2 pr-4 py-1 text-right text-[10px] font-medium text-blue-400">Bal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {group.years.map(year => (
+              <YearRow
+                key={year.fy}
+                year={year}
+                onDblClick={() => onOpenModal(group.head, year.fy)}
+              />
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -301,7 +477,7 @@ function SearchResultGroup({ group }: { group: SearchGroup }) {
 function TickerCard({ item }: { item: LedgerTickerItem }) {
   return (
     <div className="mx-1.5 my-2 flex items-center gap-2 rounded-lg border border-slate-200
-      bg-white px-3.5 py-2.5 shadow-sm whitespace-nowrap">
+      bg-white px-3.5 py-2 shadow-sm whitespace-nowrap">
       <span className="text-xs font-semibold text-slate-700">{item.head}</span>
       <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
         {item.fy}
@@ -368,20 +544,20 @@ export function HomePage() {
   );
   const aL = aL1 || aL2;
 
-  const recentFYs = useMemo(
+  // ALL other financial years (not just 3)
+  const otherFYs = useMemo(
     () => [...settings.financialYears]
       .filter(fy => fy !== settings.activeFinancialYear)
-      .sort((a, b) => b.localeCompare(a))
-      .slice(0, 3),
+      .sort((a, b) => b.localeCompare(a)),
     [settings.financialYears, settings.activeFinancialYear],
   );
 
   const { fyStats: histStats, tickerItems: histTicker, loading: hL } =
-    useDashboardData(recentFYs);
+    useDashboardData(otherFYs);
 
   const activeStats = useMemo(() => computeStats(activeEntries), [activeEntries]);
 
-  // Combined pool used for both the ticker and search
+  // Combined pool used for both the ticker and search — all years
   const allTickerPool = useMemo(
     () => [
       ...buildTickerItems(activeEntries, settings.activeFinancialYear),
@@ -414,9 +590,12 @@ export function HomePage() {
     [allTickerPool, searchQuery, settings.activeFinancialYear],
   );
 
+  // Ledger detail modal
+  const [modalLedger, setModalLedger] = useState<{ head: string; fy: string } | null>(null);
+
   const activeBal = activeStats.totalReceipts - activeStats.totalPayments;
   const userName  = user?.displayName?.split(' ')[0] || user?.email?.split('@')[0] || '';
-  const allFYs    = [settings.activeFinancialYear, ...recentFYs];
+  const allFYs    = [settings.activeFinancialYear, ...otherFYs];
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in pb-8 pt-1">
@@ -427,7 +606,7 @@ export function HomePage() {
           <h1 className="text-xl font-semibold text-slate-800">
             {getGreeting()}{userName ? `, ${userName}` : ''}
           </h1>
-          <p className="mt-0.5 text-sm text-slate-500">
+          <p className="mt-0.5 text-xs text-slate-500">
             {settings.activeFinancialYear}&nbsp;&middot;&nbsp;
             {settings.activeCashBookType === 'Both' ? 'Aided & Un-Aided' : settings.activeCashBookType}
           </p>
@@ -455,7 +634,7 @@ export function HomePage() {
         </svg>
         <input
           type="text"
-          placeholder={`Search ledgers across ${allFYs.join(', ')}…`}
+          placeholder={`Search ledgers across ${allFYs.length} financial year${allFYs.length !== 1 ? 's' : ''}…`}
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
           className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-9 text-sm
@@ -504,9 +683,13 @@ export function HomePage() {
 
           {/* Results list */}
           {searchResults.length > 0 ? (
-            <div className="flex flex-col gap-8">
+            <div className="flex flex-col gap-6">
               {searchResults.map(group => (
-                <SearchResultGroup key={group.head} group={group} />
+                <SearchResultGroup
+                  key={group.head}
+                  group={group}
+                  onOpenModal={(head, fy) => setModalLedger({ head, fy })}
+                />
               ))}
             </div>
           ) : !aL && !hL && (
@@ -568,12 +751,12 @@ export function HomePage() {
           </section>
 
           {/* ── Previous FYs ── */}
-          {recentFYs.length > 0 && (
+          {otherFYs.length > 0 && (
             <section>
               <SectionHead title="Previous Financial Years" />
               {hL ? (
                 <div className="space-y-2">
-                  {recentFYs.map(fy => <PulseSkeleton key={fy} className="h-11" />)}
+                  {otherFYs.map(fy => <PulseSkeleton key={fy} className="h-11" />)}
                 </div>
               ) : (
                 <div className="overflow-hidden rounded-xl border border-slate-200">
@@ -588,7 +771,7 @@ export function HomePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {recentFYs.map((fy, i) => {
+                      {otherFYs.map((fy, i) => {
                         const s   = histStats.get(fy);
                         const bal = (s?.totalReceipts ?? 0) - (s?.totalPayments ?? 0);
                         return (
@@ -598,19 +781,19 @@ export function HomePage() {
                               i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
                             }`}
                           >
-                            <td className="py-2.5 pl-4 pr-3 font-semibold text-slate-700">{fy}</td>
-                            <td className="px-3 py-2.5 text-right text-green-700">
+                            <td className="py-2.5 pl-4 pr-3 text-xs font-semibold text-slate-700">{fy}</td>
+                            <td className="px-3 py-2.5 text-right text-xs text-green-700">
                               {s ? formatCurrency(s.totalReceipts) : <span className="text-slate-300">—</span>}
                             </td>
-                            <td className="px-3 py-2.5 text-right text-red-600">
+                            <td className="px-3 py-2.5 text-right text-xs text-red-600">
                               {s ? formatCurrency(s.totalPayments) : <span className="text-slate-300">—</span>}
                             </td>
-                            <td className={`px-3 py-2.5 text-right font-semibold ${
+                            <td className={`px-3 py-2.5 text-right text-xs font-semibold ${
                               bal >= 0 ? 'text-blue-700' : 'text-amber-700'
                             }`}>
                               {s ? formatCurrency(Math.abs(bal)) : <span className="text-slate-300">—</span>}
                             </td>
-                            <td className="pl-3 pr-4 py-2.5 text-right text-slate-500">
+                            <td className="pl-3 pr-4 py-2.5 text-right text-xs text-slate-500">
                               {s ? s.entryCount.toLocaleString('en-IN') : <span className="text-slate-300">—</span>}
                             </td>
                           </tr>
@@ -634,6 +817,15 @@ export function HomePage() {
             </section>
           )}
         </>
+      )}
+
+      {/* ── Ledger Detail Modal ── */}
+      {modalLedger && (
+        <LedgerDetailModal
+          head={modalLedger.head}
+          fy={modalLedger.fy}
+          onClose={() => setModalLedger(null)}
+        />
       )}
 
     </div>
