@@ -3,6 +3,7 @@ import { EntryDetailModal } from './EntryDetailModal';
 import { VoucherModal } from './VoucherModal';
 import { formatCurrency } from '@/utils/formatCurrency';
 import { formatDate } from '@/utils/formatDate';
+import { useSettings } from '@/context/SettingsContext';
 import type { Entry } from '@smp-cashbook/shared';
 
 interface EntryRowProps {
@@ -22,6 +23,8 @@ export const EntryRow = memo(function EntryRow({
   const [voucherOpen, setVoucherOpen] = useState(false);
   const [menu,        setMenu]        = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { settings } = useSettings();
+  const showCashBookBadge = settings.activeCashBookType === 'Both';
 
   // Close context menu on Escape
   useEffect(() => {
@@ -62,12 +65,30 @@ export const EntryRow = memo(function EntryRow({
             }`}>
               {entry.type}
             </span>
+            {showCashBookBadge && (
+              <span className={`mt-0.5 flex rounded px-1.5 py-0.5 text-[10px] font-semibold w-fit ${
+                entry.cashBookType === 'Aided'
+                  ? 'bg-teal-50 text-teal-600'
+                  : 'bg-orange-50 text-orange-600'
+              }`}>
+                {entry.cashBookType === 'Aided' ? 'Aided' : 'Un-Aided'}
+              </span>
+            )}
           </td>
         )}
 
         {/* Head of Account — fills remaining space, truncated, no wrap */}
         <td className="px-2 py-2.5 text-sm text-slate-800 whitespace-nowrap overflow-hidden max-w-0">
           <span className="block truncate">{entry.headOfAccount}</span>
+          {compact && showCashBookBadge && (
+            <span className={`mt-0.5 inline-flex rounded px-1.5 py-0 text-[10px] font-semibold leading-4 ${
+              entry.cashBookType === 'Aided'
+                ? 'bg-teal-50 text-teal-600'
+                : 'bg-orange-50 text-orange-600'
+            }`}>
+              {entry.cashBookType === 'Aided' ? 'Aided' : 'Un-Aided'}
+            </span>
+          )}
         </td>
 
         {/* Cheque No + optional Voucher No badge — fixed 100px */}

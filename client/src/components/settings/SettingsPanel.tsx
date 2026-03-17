@@ -9,7 +9,7 @@ import { ResetSection } from './ResetSection';
 import { SalaryEntrySection } from './SalaryEntrySection';
 import { cn } from '@/utils/cn';
 import { getCurrentFinancialYear, generateFYLabel, isValidFY } from '@smp-cashbook/shared';
-import type { CashBookType } from '@smp-cashbook/shared';
+import type { CashBookType, ActiveCashBookType } from '@smp-cashbook/shared';
 
 function getNextFY(existingYears: string[]): string {
   if (existingYears.length === 0) return getCurrentFinancialYear();
@@ -95,7 +95,7 @@ function GeneralSection() {
   const [saving, setSaving] = useState<string | null>(null);
 
   const suggestedFY = getNextFY(settings.financialYears);
-  const cashBookTypes: CashBookType[] = ['Aided', 'Un-Aided'];
+  const cashBookTypes: ActiveCashBookType[] = ['Aided', 'Un-Aided', 'Both'];
 
   const handleAddFY = async () => {
     const fy = newFY.trim() || suggestedFY;
@@ -130,7 +130,7 @@ function GeneralSection() {
     finally { setSaving(null); }
   };
 
-  const handleSetCashBookType = async (type: CashBookType) => {
+  const handleSetCashBookType = async (type: ActiveCashBookType) => {
     setSaving(`type-${type}`);
     try {
       await setActiveCashBookType(type);
@@ -155,7 +155,9 @@ function GeneralSection() {
                 settings.activeCashBookType === type
                   ? type === 'Aided'
                     ? 'border-green-300 bg-green-50 text-green-700 ring-2 ring-green-300'
-                    : 'border-red-300 bg-red-50 text-red-700 ring-2 ring-red-300'
+                    : type === 'Un-Aided'
+                    ? 'border-red-300 bg-red-50 text-red-700 ring-2 ring-red-300'
+                    : 'border-purple-300 bg-purple-50 text-purple-700 ring-2 ring-purple-300'
                   : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700'
               )}
             >

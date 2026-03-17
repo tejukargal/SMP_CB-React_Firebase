@@ -54,12 +54,48 @@ export interface FeeRegisterRow {
   rowTotal: number;
 }
 
+export interface SplitFeeRegisterRow extends FeeRegisterRow {
+  cashBookType: string;   // 'Aided' | 'Un-Aided'
+}
+
 // ── Export meta ───────────────────────────────────────────────────────────────
 export interface FeeRegisterMeta {
   financialYear: string;
   cashBookType:  string;
   dateFrom?:     string;
   dateTo?:       string;
+  splitView?:    boolean;   // when true (Both mode), export per cashBookType rows
+}
+
+// ── Build split rows (grouped by date × cashBookType) ────────────────────────
+export function buildSplitFeeRows(
+  entries: Entry[],
+  visibleHeads: readonly string[],
+): SplitFeeRegisterRow[] {
+  const keyMap  = new Map<string, Map<string, number>>();
+  const metaMap = new Map<string, { date: string; cashBookType: string }>();
+
+  for (const e of entries) {
+    if (e.type !== 'Receipt') continue;
+    const head = canonicalFeeHead(e.headOfAccount);
+    if (!head) continue;
+    const key = `${e.date}|${e.cashBookType}`;
+    if (!keyMap.has(key)) {
+      keyMap.set(key, new Map());
+      metaMap.set(key, { date: e.date, cashBookType: e.cashBookType });
+    }
+    const m = keyMap.get(key)!;
+    m.set(head, (m.get(head) ?? 0) + e.amount);
+  }
+
+  return Array.from(keyMap.keys())
+    .sort()
+    .map(key => {
+      const amounts  = keyMap.get(key)!;
+      const meta     = metaMap.get(key)!;
+      const rowTotal = visibleHeads.reduce((s, h) => s + (amounts.get(h) ?? 0), 0);
+      return { date: meta.date, cashBookType: meta.cashBookType, amounts, rowTotal };
+    });
 }
 
 // ── Build rows (used by both UI and export) ───────────────────────────────────
@@ -91,18 +127,26 @@ export function buildFeeRows(
 // FEE REGISTER PDF
 //
 // Landscape A4 (277 mm usable).
-// Columns: Date (20) | <each head> (equal share of 237mm) | Total (20+extra)
-// Empty cells (zero amount) print blank to keep the table readable.
-// Grand totals row at the bottom with grey-200 fill.
+// Consolidated: Date (20) | heads (share 237mm) | Total (20+extra)
+// Split:        Date (20) | Type (16) | heads (share 221mm) | Total (20+extra)
+// Empty cells (zero amount) print blank. Grand totals row with grey fill.
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Row fill colours for split view (light teal / light orange)
+const C_AIDED:   RGB = [236, 253, 245];   // teal-50
+const C_UNAIDED: RGB = [255, 247, 237];   // orange-50
+
 export function exportFeeRegisterPDF(
   entries:      Entry[],
   visibleHeads: readonly string[],
   meta:         FeeRegisterMeta,
 ) {
-  const doc    = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const rows   = buildFeeRows(entries, visibleHeads);
-  const n      = visibleHeads.length;
+  const isSplit  = !!(meta.splitView);
+  const doc      = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const dataRows = isSplit
+    ? buildSplitFeeRows(entries, visibleHeads)
+    : buildFeeRows(entries, visibleHeads);
+  const n = visibleHeads.length;
 
   // ── Header ──
   doc.setFont('helvetica', 'bold');
@@ -111,7 +155,10 @@ export function exportFeeRegisterPDF(
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text(`SMP Cash Book  ·  ${meta.cashBookType}`, PAGE_CX, 20, { align: 'center' });
+  const subTitle = isSplit
+    ? `${meta.cashBookType}  ·  Split View (Aided & Un-Aided)`
+    : `SMP Cash Book  ·  ${meta.cashBookType}`;
+  doc.text(subTitle, PAGE_CX, 20, { align: 'center' });
 
   doc.setFontSize(8);
   doc.setTextColor(100, 116, 139);
@@ -123,56 +170,85 @@ export function exportFeeRegisterPDF(
   doc.setTextColor(0, 0, 0);
 
   // ── Column widths ──
-  // Usable: 277mm. Date=20, Total=20+extra, each head=floor(237/n)
-  const headW  = n > 0 ? Math.floor(237 / n) : 0;
-  const extra  = 237 - headW * n;          // leftover goes to Total column
+  // Usable: 277mm. In split mode a 16mm Type column is inserted after Date.
+  // Remaining space for heads + Total: 277 - 20 (Date) - [16 (Type)] - 20 (Total base)
+  const TYPE_W    = 16;
+  const headsPool = isSplit ? (277 - 20 - TYPE_W - 20) : (277 - 20 - 20); // 221 or 237
+  const headW     = n > 0 ? Math.floor(headsPool / n) : 0;
+  const extra     = headsPool - headW * n;   // leftover goes to Total column
 
   // ── Body rows ──
   const fmtAmt = (v: number) => v === 0 ? '' : v.toFixed(2);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const body: any[] = rows.map(row => [
-    formatDate(row.date),
-    ...visibleHeads.map(h => fmtAmt(row.amounts.get(h) ?? 0)),
-    row.rowTotal.toFixed(2),
-  ]);
+  const body: any[] = dataRows.map(row => {
+    const splitRow = row as SplitFeeRegisterRow;
+    const cells = [formatDate(row.date)];
+    if (isSplit) cells.push(splitRow.cashBookType ?? '');
+    cells.push(...visibleHeads.map(h => fmtAmt(row.amounts.get(h) ?? 0)));
+    cells.push(row.rowTotal.toFixed(2));
+    return cells;
+  });
 
   // Grand totals row
   const grandTotals = visibleHeads.map(h =>
-    rows.reduce((s, r) => s + (r.amounts.get(h) ?? 0), 0),
+    dataRows.reduce((s, r) => s + (r.amounts.get(h) ?? 0), 0),
   );
   const grandTotal = grandTotals.reduce((s, v) => s + v, 0);
-  body.push(['Total', ...grandTotals.map(v => v.toFixed(2)), grandTotal.toFixed(2)]);
+  const totalRow = ['Total'];
+  if (isSplit) totalRow.push('');   // blank under Type column
+  totalRow.push(...grandTotals.map(v => v.toFixed(2)), grandTotal.toFixed(2));
+  body.push(totalRow);
 
   // ── Column styles ──
+  // Col 0: Date, [Col 1: Type (split only)], Cols +1..+n: heads, last: Total
+  const typeOffset  = isSplit ? 1 : 0;   // extra columns before heads
+  const totalColIdx = 1 + typeOffset + n; // index of the Total column
+
   const colStyles: Record<number, object> = {
-    0:     { cellWidth: 20 },
-    [n+1]: { cellWidth: 20 + extra, halign: 'right' as const, fontStyle: 'bold' as const },
+    0:            { cellWidth: 20 },
+    [totalColIdx]: { cellWidth: 20 + extra, halign: 'right' as const, fontStyle: 'bold' as const },
   };
-  for (let i = 0; i < n; i++) {
-    colStyles[i + 1] = { cellWidth: headW, halign: 'right' as const };
+  if (isSplit) {
+    colStyles[1] = { cellWidth: TYPE_W, halign: 'center' as const };
   }
+  for (let i = 0; i < n; i++) {
+    colStyles[1 + typeOffset + i] = { cellWidth: headW, halign: 'right' as const };
+  }
+
+  const headRow = ['Date'];
+  if (isSplit) headRow.push('Type');
+  headRow.push(...visibleHeads, 'Total');
 
   autoTable(doc, {
     startY:     32,
     margin:     { left: MARGIN, right: MARGIN },
     tableWidth: 277,
-    head:       [['Date', ...visibleHeads, 'Total']],
+    head:       [headRow],
     body,
     styles:     BASE,
     headStyles: HEAD_S,
     columnStyles: colStyles,
     didParseCell: (data) => {
       if (data.section !== 'body') return;
-      data.cell.styles.fillColor = C_WHITE;
-      if (data.row.index === rows.length) {          // grand totals row
+      if (data.row.index === dataRows.length) {   // grand totals row
         data.cell.styles.fillColor = C_TOTAL;
         data.cell.styles.fontStyle = 'bold';
+        return;
+      }
+      if (isSplit) {
+        // Colour rows by cashBookType
+        const splitRow = dataRows[data.row.index] as SplitFeeRegisterRow;
+        data.cell.styles.fillColor =
+          splitRow.cashBookType === 'Aided' ? C_AIDED : C_UNAIDED;
+      } else {
+        data.cell.styles.fillColor = C_WHITE;
       }
     },
   });
 
-  doc.save(`fee-register-${meta.financialYear.replace('/', '-')}.pdf`);
+  const suffix = isSplit ? '-split' : '';
+  doc.save(`fee-register-${meta.financialYear.replace('/', '-')}${suffix}.pdf`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -183,38 +259,55 @@ export function exportFeeRegisterExcel(
   visibleHeads: readonly string[],
   meta:         FeeRegisterMeta,
 ) {
-  const rows = buildFeeRows(entries, visibleHeads);
+  const isSplit  = !!(meta.splitView);
+  const dataRows = isSplit
+    ? buildSplitFeeRows(entries, visibleHeads)
+    : buildFeeRows(entries, visibleHeads);
 
   const grandTotals = visibleHeads.map(h =>
-    rows.reduce((s, r) => s + (r.amounts.get(h) ?? 0), 0),
+    dataRows.reduce((s, r) => s + (r.amounts.get(h) ?? 0), 0),
   );
   const grandTotal = grandTotals.reduce((s, v) => s + v, 0);
 
+  const titleLine = isSplit
+    ? `Fee Register — ${meta.cashBookType} (Split View)`
+    : `Fee Register — ${meta.cashBookType}`;
+
+  const headerRow = isSplit
+    ? ['Date', 'Type', ...visibleHeads, 'Total']
+    : ['Date', ...visibleHeads, 'Total'];
+
+  const grandTotalRow = isSplit
+    ? ['Grand Total', '', ...grandTotals, grandTotal]
+    : ['Grand Total', ...grandTotals, grandTotal];
+
   const sheetRows: (string | number)[][] = [
-    [`Fee Register — ${meta.cashBookType}`],
+    [titleLine],
     [`Financial Year: ${meta.financialYear}`],
     ...(meta.dateFrom || meta.dateTo
       ? [[`Period: ${meta.dateFrom ? formatDate(meta.dateFrom) : '—'}  to  ${meta.dateTo ? formatDate(meta.dateTo) : '—'}`]]
       : []),
     [],
-    ['Date', ...visibleHeads, 'Total'],
-    ...rows.map(row => [
-      formatDate(row.date),
-      ...visibleHeads.map(h => row.amounts.get(h) ?? 0),
-      row.rowTotal,
-    ]),
+    headerRow,
+    ...dataRows.map(row => {
+      const splitRow = row as SplitFeeRegisterRow;
+      const cells: (string | number)[] = [formatDate(row.date)];
+      if (isSplit) cells.push(splitRow.cashBookType ?? '');
+      cells.push(...visibleHeads.map(h => row.amounts.get(h) ?? 0));
+      cells.push(row.rowTotal);
+      return cells;
+    }),
     [],
-    ['Grand Total', ...grandTotals, grandTotal],
+    grandTotalRow,
   ];
 
   const ws = XLSX.utils.aoa_to_sheet(sheetRows);
-  ws['!cols'] = [
-    { wch: 12 },
-    ...visibleHeads.map(() => ({ wch: 11 })),
-    { wch: 13 },
-  ];
+  ws['!cols'] = isSplit
+    ? [{ wch: 12 }, { wch: 10 }, ...visibleHeads.map(() => ({ wch: 11 })), { wch: 13 }]
+    : [{ wch: 12 }, ...visibleHeads.map(() => ({ wch: 11 })), { wch: 13 }];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Fee Register');
-  XLSX.writeFile(wb, `fee-register-${meta.financialYear.replace('/', '-')}.xlsx`);
+  const suffix = isSplit ? '-split' : '';
+  XLSX.writeFile(wb, `fee-register-${meta.financialYear.replace('/', '-')}${suffix}.xlsx`);
 }

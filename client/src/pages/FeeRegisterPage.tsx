@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useEntries } from '@/hooks/useEntries';
 import { useSettings } from '@/context/SettingsContext';
 import { formatCurrency } from '@/utils/formatCurrency';
@@ -7,8 +7,10 @@ import {
   FEE_HEADS,
   canonicalFeeHead,
   buildFeeRows,
+  buildSplitFeeRows,
   exportFeeRegisterPDF,
   exportFeeRegisterExcel,
+  type SplitFeeRegisterRow,
 } from '@/utils/exportFeeRegister';
 import { EntrySkeleton } from '@/components/entries/EntrySkeleton';
 
@@ -23,6 +25,14 @@ export function FeeRegisterPage() {
   const [dateFrom,     setDateFrom]     = useState('');
   const [dateTo,       setDateTo]       = useState('');
   const [visibleHeads, setVisibleHeads] = useState<Set<string>>(new Set(FEE_HEADS));
+  const [splitView,    setSplitView]    = useState(false);
+
+  const isBoth = settings.activeCashBookType === 'Both';
+
+  // Reset split view when no longer in Both mode
+  useEffect(() => {
+    if (!isBoth) setSplitView(false);
+  }, [isBoth]);
 
   // ── Fee receipt entries ────────────────────────────────────────────────────
   const feeEntries = useMemo(
@@ -46,30 +56,44 @@ export function FeeRegisterPage() {
     [visibleHeads],
   );
 
-  // All rows after date filter
+  // ── Consolidated rows ──────────────────────────────────────────────────────
   const allRows = useMemo(
     () => buildFeeRows(dateFilteredEntries, visibleHeadsList),
     [dateFilteredEntries, visibleHeadsList],
   );
 
-  // Search filter (applied on top for UI display only; export uses dateFilteredEntries)
   const rows = useMemo(() => {
     if (!search.trim()) return allRows;
     const q = search.toLowerCase();
     return allRows.filter(r => formatDate(r.date).includes(q) || r.date.includes(q));
   }, [allRows, search]);
 
-  // Grand totals for visible rows
+  // ── Split rows (date × cashBookType) ──────────────────────────────────────
+  const allSplitRows = useMemo(
+    () => buildSplitFeeRows(dateFilteredEntries, visibleHeadsList),
+    [dateFilteredEntries, visibleHeadsList],
+  );
+
+  const splitRows = useMemo(() => {
+    if (!search.trim()) return allSplitRows;
+    const q = search.toLowerCase();
+    return allSplitRows.filter(r => formatDate(r.date).includes(q) || r.date.includes(q));
+  }, [allSplitRows, search]);
+
+  // Active rows driving both the table and grand totals
+  const activeRows = (splitView && isBoth) ? splitRows : rows;
+
+  // Grand totals for active rows
   const grandTotals = useMemo(() => {
     const map  = new Map<string, number>();
     let grand  = 0;
     for (const h of visibleHeadsList) {
-      const sum = rows.reduce((s, r) => s + (r.amounts.get(h) ?? 0), 0);
+      const sum = activeRows.reduce((s, r) => s + (r.amounts.get(h) ?? 0), 0);
       map.set(h, sum);
       grand += sum;
     }
     return { map, grand };
-  }, [rows, visibleHeadsList]);
+  }, [activeRows, visibleHeadsList]);
 
   // ── Head toggle ────────────────────────────────────────────────────────────
   const toggleHead = (h: string) => {
@@ -91,7 +115,11 @@ export function FeeRegisterPage() {
     cashBookType:  settings.activeCashBookType,
     dateFrom:      dateFrom || undefined,
     dateTo:        dateTo   || undefined,
+    splitView:     splitView && isBoth,
   };
+
+  // Helper: cast row to SplitFeeRegisterRow (safe only in split mode)
+  const asSplit = (r: typeof activeRows[number]) => r as SplitFeeRegisterRow;
 
   return (
     <div className="flex flex-col gap-4 animate-fade-in pb-6">
@@ -104,7 +132,7 @@ export function FeeRegisterPage() {
           </div>
         )}
 
-        {/* Row 1: search · date range · export buttons */}
+        {/* Row 1: search · date range · split toggle · export buttons */}
         <div className="flex items-center gap-2.5 flex-wrap">
 
           {/* Search */}
@@ -154,6 +182,27 @@ export function FeeRegisterPage() {
               className="text-xs text-slate-400 hover:text-red-500 transition-colors"
             >
               Clear
+            </button>
+          )}
+
+          {/* Split / Consolidated toggle — only when Both mode is active */}
+          {isBoth && (
+            <button
+              type="button"
+              onClick={() => setSplitView(v => !v)}
+              title={splitView ? 'Switch to consolidated view' : 'Switch to split view (Aided / Un-Aided separately)'}
+              className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                splitView
+                  ? 'border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-200 hover:text-indigo-600'
+              }`}
+            >
+              {/* columns icon */}
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 0v10" />
+              </svg>
+              {splitView ? 'Split' : 'Consolidated'}
             </button>
           )}
 
@@ -226,8 +275,10 @@ export function FeeRegisterPage() {
           </span>
         </div>
         <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-          <span className="text-xs text-slate-500">Days</span>
-          <span className="text-sm font-semibold text-slate-700">{rows.length}</span>
+          <span className="text-xs text-slate-500">
+            {splitView && isBoth ? 'Rows' : 'Days'}
+          </span>
+          <span className="text-sm font-semibold text-slate-700">{activeRows.length}</span>
         </div>
         <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
           <span className="text-xs text-slate-500">Fee Entries</span>
@@ -240,6 +291,11 @@ export function FeeRegisterPage() {
             </span>
           </div>
         )}
+        {splitView && isBoth && (
+          <div className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
+            <span className="text-xs text-indigo-600">Split View — Aided &amp; Un-Aided separately</span>
+          </div>
+        )}
       </div>
 
       {/* ── Table ── */}
@@ -247,7 +303,7 @@ export function FeeRegisterPage() {
         <div className="rounded-lg border border-slate-200 p-4">
           <EntrySkeleton />
         </div>
-      ) : rows.length === 0 ? (
+      ) : activeRows.length === 0 ? (
         <div className="rounded-lg border border-slate-200 py-16 text-center text-sm text-slate-400">
           {feeEntries.length === 0
             ? 'No fee receipts found in the cash book.'
@@ -255,8 +311,6 @@ export function FeeRegisterPage() {
         </div>
       ) : (
         <div className="rounded-lg border border-slate-200 overflow-clip">
-          {/* overflow-x-auto + overflow-y-auto: contained scrollable widget;
-              sticky top-0 thead works relative to this scroll container */}
           <div
             className="overflow-x-auto overflow-y-auto"
             style={{ maxHeight: 'calc(100vh - 280px)' }}
@@ -269,6 +323,13 @@ export function FeeRegisterPage() {
                     border-r border-slate-500">
                     Date
                   </th>
+                  {/* Type column — only in split mode */}
+                  {(splitView && isBoth) && (
+                    <th className="py-2 pl-3 pr-3 text-xs font-semibold text-left whitespace-nowrap
+                      border-r border-slate-500">
+                      Type
+                    </th>
+                  )}
                   {visibleHeadsList.map(h => (
                     <th key={h} className="px-3 py-2 text-xs font-semibold text-right whitespace-nowrap
                       border-r border-slate-500">
@@ -283,34 +344,54 @@ export function FeeRegisterPage() {
               </thead>
 
               <tbody>
-                {rows.map((row, idx) => (
-                  <tr
-                    key={row.date}
-                    className={`border-b border-slate-100 hover:bg-blue-50/50 transition-colors
-                      ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}
-                  >
-                    <td className="py-1.5 pl-3 pr-3 text-xs font-medium text-slate-700
-                      whitespace-nowrap border-r border-slate-100">
-                      {formatDate(row.date)}
-                    </td>
-                    {visibleHeadsList.map(h => {
-                      const amt = row.amounts.get(h) ?? 0;
-                      return (
-                        <td key={h} className="px-3 py-1.5 text-xs text-right whitespace-nowrap
-                          border-r border-slate-100">
-                          {amt > 0
-                            ? <span className="text-slate-700">{formatCurrency(amt)}</span>
-                            : <span className="text-slate-300">—</span>
-                          }
+                {activeRows.map((row, idx) => {
+                  const splitRow = splitView && isBoth ? asSplit(row) : null;
+                  const rowBg = splitRow
+                    ? splitRow.cashBookType === 'Aided'
+                      ? 'bg-teal-50/30'
+                      : 'bg-orange-50/30'
+                    : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40';
+
+                  return (
+                    <tr
+                      key={splitRow ? `${row.date}-${splitRow.cashBookType}` : row.date}
+                      className={`border-b border-slate-100 hover:bg-blue-50/50 transition-colors ${rowBg}`}
+                    >
+                      <td className="py-1.5 pl-3 pr-3 text-xs font-medium text-slate-700
+                        whitespace-nowrap border-r border-slate-100">
+                        {formatDate(row.date)}
+                      </td>
+                      {/* Type badge — only in split mode */}
+                      {splitRow && (
+                        <td className="py-1.5 pl-3 pr-3 text-xs whitespace-nowrap border-r border-slate-100">
+                          <span className={`inline-flex rounded px-1.5 py-0 text-[10px] font-semibold leading-4 ${
+                            splitRow.cashBookType === 'Aided'
+                              ? 'bg-teal-100 text-teal-700'
+                              : 'bg-orange-100 text-orange-700'
+                          }`}>
+                            {splitRow.cashBookType}
+                          </span>
                         </td>
-                      );
-                    })}
-                    <td className="pl-3 pr-3 py-1.5 text-xs font-bold text-right text-slate-800
-                      whitespace-nowrap bg-slate-50/60">
-                      {formatCurrency(row.rowTotal)}
-                    </td>
-                  </tr>
-                ))}
+                      )}
+                      {visibleHeadsList.map(h => {
+                        const amt = row.amounts.get(h) ?? 0;
+                        return (
+                          <td key={h} className="px-3 py-1.5 text-xs text-right whitespace-nowrap
+                            border-r border-slate-100">
+                            {amt > 0
+                              ? <span className="text-slate-700">{formatCurrency(amt)}</span>
+                              : <span className="text-slate-300">—</span>
+                            }
+                          </td>
+                        );
+                      })}
+                      <td className="pl-3 pr-3 py-1.5 text-xs font-bold text-right text-slate-800
+                        whitespace-nowrap bg-slate-50/60">
+                        {formatCurrency(row.rowTotal)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
 
               <tfoot>
@@ -319,9 +400,13 @@ export function FeeRegisterPage() {
                     border-r border-slate-500">
                     Total&nbsp;
                     <span className="font-normal opacity-70">
-                      ({rows.length} {rows.length === 1 ? 'day' : 'days'})
+                      ({activeRows.length} {splitView && isBoth ? 'rows' : activeRows.length === 1 ? 'day' : 'days'})
                     </span>
                   </td>
+                  {/* Spacer for Type column */}
+                  {(splitView && isBoth) && (
+                    <td className="py-2 pl-3 pr-3 border-r border-slate-500" />
+                  )}
                   {visibleHeadsList.map(h => (
                     <td key={h} className="px-3 py-2 text-xs font-bold text-right whitespace-nowrap
                       border-r border-slate-500">

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { doc, onSnapshot } from 'firebase/firestore';
 import { firestore } from '@/firebase';
 import { apiUpdateSettings } from '@/api/settings';
-import type { Settings, CashBookType, UpdateSettingsPayload } from '@smp-cashbook/shared';
+import type { Settings, CashBookType, ActiveCashBookType, UpdateSettingsPayload } from '@smp-cashbook/shared';
 import { getCurrentFinancialYear } from '@smp-cashbook/shared';
 
 const DEFAULT_SETTINGS: Settings = {
@@ -15,7 +15,7 @@ interface SettingsContextValue {
   settings: Settings;
   loading: boolean;
   setActiveFY: (fy: string) => Promise<void>;
-  setActiveCashBookType: (type: CashBookType) => Promise<void>;
+  setActiveCashBookType: (type: ActiveCashBookType) => Promise<void>;
   addFinancialYear: (fy: string) => Promise<void>;
   removeFinancialYear: (fy: string) => Promise<void>;
 }
@@ -47,7 +47,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   );
 
   const setActiveCashBookType = useCallback(
-    async (type: CashBookType) => update({ activeCashBookType: type }),
+    async (type: ActiveCashBookType) => update({ activeCashBookType: type }),
     [update]
   );
 

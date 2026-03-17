@@ -48,6 +48,10 @@ export function EntryForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
+    if (settings.activeCashBookType === 'Both') {
+      addToast('Switch to Aided or Un-Aided to add entries', 'error');
+      return;
+    }
 
     setSubmitting(true);
     try {

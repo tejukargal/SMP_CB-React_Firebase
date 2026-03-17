@@ -139,46 +139,49 @@ function LedgerColumn({
 
 function LedgerRow({ entry }: { entry: Entry }) {
   const [detailOpen, setDetailOpen] = useState(false);
-  const hasNotes = Boolean(entry.notes);
+  const { settings } = useSettings();
+  const showCashBookBadge = settings.activeCashBookType === 'Both';
 
   return (
     <>
       <tr
         onDoubleClick={() => setDetailOpen(true)}
-        className={`hover:bg-slate-50 cursor-pointer transition-colors
-          ${hasNotes ? '' : 'border-b border-slate-100'}`}
+        className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
       >
-        <td className="py-2 pl-4 pr-2 text-xs text-slate-500 whitespace-nowrap">
+        <td className="py-2 pl-4 pr-2 text-xs text-slate-500 whitespace-nowrap align-top">
           {formatDate(entry.date)}
         </td>
-        <td className="px-2 py-2 text-xs text-slate-800 whitespace-nowrap overflow-hidden max-w-0">
+        <td className="px-2 py-2 text-xs text-slate-800 overflow-hidden max-w-0">
           <span className="block truncate">{entry.headOfAccount}</span>
-        </td>
-        <td className="px-2 py-2 text-xs text-slate-400 whitespace-nowrap">
-          {entry.chequeNo || '—'}
-        </td>
-        <td className="pl-2 pr-4 py-2 text-xs font-semibold text-right whitespace-nowrap">
-          <span className={entry.type === 'Receipt' ? 'text-green-700' : 'text-red-700'}>
-            {formatCurrency(entry.amount)}
-          </span>
-        </td>
-      </tr>
-
-      {hasNotes && (
-        <tr
-          onDoubleClick={() => setDetailOpen(true)}
-          className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
-        >
-          <td colSpan={4} className="pb-2 pt-0 pl-4 pr-4 overflow-hidden">
-            <div
-              className="truncate text-xs text-amber-700 italic"
+          {entry.notes && (
+            <span
+              className="block truncate text-[11px] text-amber-700 italic"
               title={entry.notes}
             >
               {entry.notes}
+            </span>
+          )}
+        </td>
+        <td className="px-2 py-2 text-xs text-slate-400 whitespace-nowrap align-top">
+          {entry.chequeNo || '—'}
+        </td>
+        <td className="pl-2 pr-4 py-2 text-xs font-semibold text-right whitespace-nowrap align-top">
+          <span className={entry.type === 'Receipt' ? 'text-green-700' : 'text-red-700'}>
+            {formatCurrency(entry.amount)}
+          </span>
+          {showCashBookBadge && (
+            <div className="mt-0.5 flex justify-end">
+              <span className={`inline-flex rounded px-1.5 py-0 text-[10px] font-semibold leading-4 ${
+                entry.cashBookType === 'Aided'
+                  ? 'bg-teal-50 text-teal-600'
+                  : 'bg-orange-50 text-orange-600'
+              }`}>
+                {entry.cashBookType === 'Aided' ? 'Aided' : 'Un-Aided'}
+              </span>
             </div>
-          </td>
-        </tr>
-      )}
+          )}
+        </td>
+      </tr>
 
       {detailOpen && (
         <EntryDetailModal entry={entry} onClose={() => setDetailOpen(false)} />

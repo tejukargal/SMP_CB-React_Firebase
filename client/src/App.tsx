@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { HomePage } from '@/pages/HomePage';
 import { NewEntryPage } from '@/pages/NewEntryPage';
 import { EntriesPage } from '@/pages/EntriesPage';
 import { LedgersPage } from '@/pages/LedgersPage';
@@ -42,7 +43,8 @@ export default function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="/new-entry" replace />} />
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="dashboard" element={<HomePage />} />
           <Route path="new-entry" element={<NewEntryPage />} />
           <Route path="entries" element={<EntriesPage />} />
           <Route path="ledgers" element={<LedgersPage />} />

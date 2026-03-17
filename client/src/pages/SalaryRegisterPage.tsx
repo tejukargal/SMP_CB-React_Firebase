@@ -26,11 +26,20 @@ function fmtDate(iso: string) {
   return `${d}/${m}`;
 }
 
-function EntryLine({ e, color }: { e: Entry; color: 'green' | 'red' }) {
+function EntryLine({ e, color, showCashBookBadge }: { e: Entry; color: 'green' | 'red'; showCashBookBadge?: boolean }) {
   return (
     <div className="flex items-start justify-between gap-3 px-3 py-1.5 hover:bg-slate-50/60 transition-colors">
       <div className="min-w-0">
-        <div className="text-xs font-medium text-slate-700 truncate">{e.headOfAccount}</div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-medium text-slate-700 truncate">{e.headOfAccount}</span>
+          {showCashBookBadge && (
+            <span className={`inline-flex shrink-0 rounded px-1.5 py-0 text-[10px] font-semibold leading-4 ${
+              e.cashBookType === 'Aided' ? 'bg-teal-50 text-teal-600' : 'bg-orange-50 text-orange-600'
+            }`}>
+              {e.cashBookType === 'Aided' ? 'Aided' : 'Un-Aided'}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
           <span className={`text-[11px] font-semibold tabular-nums ${
             color === 'green' ? 'text-green-600' : 'text-red-500'
@@ -119,7 +128,8 @@ export function SalaryRegisterPage() {
     dateTo:        dateTo   || undefined,
   };
 
-  const hasFilters = !!(dateFrom || dateTo);
+  const hasFilters          = !!(dateFrom || dateTo);
+  const showCashBookBadge   = settings.activeCashBookType === 'Both';
 
   return (
     <div className="flex flex-col gap-4 animate-fade-in pb-6">
@@ -274,13 +284,13 @@ export function SalaryRegisterPage() {
                     {/* Grant section */}
                     <SectionLabel label={GRANT_LABEL[group.salaryType]} />
                     {grantEntries.length > 0
-                      ? grantEntries.map(e => <EntryLine key={e.id} e={e} color="green" />)
+                      ? grantEntries.map(e => <EntryLine key={e.id} e={e} color="green" showCashBookBadge={showCashBookBadge} />)
                       : <EmptySection />}
 
                     {/* Deductions credited section */}
                     <SectionLabel label="Deductions Credited" />
                     {deductionReceipts.length > 0
-                      ? deductionReceipts.map(e => <EntryLine key={e.id} e={e} color="green" />)
+                      ? deductionReceipts.map(e => <EntryLine key={e.id} e={e} color="green" showCashBookBadge={showCashBookBadge} />)
                       : <EmptySection />}
 
                     {/* Receipts total */}
@@ -301,13 +311,13 @@ export function SalaryRegisterPage() {
                     {/* Salary disbursed section */}
                     <SectionLabel label={DISBURSE_LABEL[group.salaryType]} />
                     {salaryDisbursed.length > 0
-                      ? salaryDisbursed.map(e => <EntryLine key={e.id} e={e} color="red" />)
+                      ? salaryDisbursed.map(e => <EntryLine key={e.id} e={e} color="red" showCashBookBadge={showCashBookBadge} />)
                       : <EmptySection />}
 
                     {/* Deductions paid section */}
                     <SectionLabel label="Deductions Paid" />
                     {deductionPayments.length > 0
-                      ? deductionPayments.map(e => <EntryLine key={e.id} e={e} color="red" />)
+                      ? deductionPayments.map(e => <EntryLine key={e.id} e={e} color="red" showCashBookBadge={showCashBookBadge} />)
                       : <EmptySection />}
 
                     {/* Payments total */}

@@ -92,6 +92,11 @@ export function SalaryEntrySection() {
       return;
     }
 
+    if (settings.activeCashBookType === 'Both') {
+      addToast('Switch to Aided or Un-Aided to add salary entries', 'error');
+      return;
+    }
+
     const period          = toProperCase(expandMonth(notes.trim()));
     const canonicalCheque = cheque.trim() || 'Neft';
     const fy     = settings.activeFinancialYear;

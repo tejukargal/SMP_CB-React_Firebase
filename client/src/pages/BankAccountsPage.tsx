@@ -50,13 +50,14 @@ function openingDateLabel(financialYear: string): string {
 }
 
 interface StatementRow {
-  id:        string;
-  date:      string;
-  narration: string;
-  chequeNo:  string;
-  debit:     number;   // Receipt → money IN  → balance ↑
-  credit:    number;   // Payment → money OUT → balance ↓
-  balance:   number;   // running balance after this row
+  id:           string;
+  date:         string;
+  narration:    string;
+  chequeNo:     string;
+  cashBookType: import('@smp-cashbook/shared').CashBookType;
+  debit:        number;   // Receipt → cash drawn FROM bank → balance ↓
+  credit:       number;   // Payment → cash deposited TO bank → balance ↑
+  balance:      number;   // running balance after this row
 }
 
 // ── Color maps ────────────────────────────────────────────────────────────────
@@ -178,13 +179,14 @@ function OpeningBalanceEditor({
 // ── Statement table ───────────────────────────────────────────────────────────
 
 function StatementTable({
-  bank, entries, financialYear, openingBalance, onOpeningBalanceChange,
+  bank, entries, financialYear, openingBalance, onOpeningBalanceChange, showCashBookBadge,
 }: {
   bank: (typeof BANK_ACCOUNTS)[number];
   entries: Entry[];
   financialYear: string;
   openingBalance: number;
   onOpeningBalanceChange: (key: BankKey, bal: number) => void;
+  showCashBookBadge: boolean;
 }) {
   const bankEntries = useMemo(
     () =>
@@ -206,10 +208,11 @@ function StatementTable({
       // Payment = cash deposited TO bank = Deposit  = Credit → balance increases
       running = running + credit - debit;
       return {
-        id:        e.id,
-        date:      e.date,
-        narration: e.notes.trim() || '—',
-        chequeNo:  e.chequeNo.trim() || '—',
+        id:           e.id,
+        date:         e.date,
+        narration:    e.notes.trim() || '—',
+        chequeNo:     e.chequeNo.trim() || '—',
+        cashBookType: e.cashBookType,
         debit, credit, balance: running,
       };
     });
@@ -306,6 +309,15 @@ function StatementTable({
                   </td>
                   <td className="px-2 py-2.5 text-xs text-slate-700 overflow-hidden max-w-0">
                     <span className="block truncate" title={row.narration}>{row.narration}</span>
+                    {showCashBookBadge && (
+                      <span className={`mt-0.5 inline-flex rounded px-1.5 py-0 text-[10px] font-semibold leading-4 ${
+                        row.cashBookType === 'Aided'
+                          ? 'bg-teal-50 text-teal-600'
+                          : 'bg-orange-50 text-orange-600'
+                      }`}>
+                        {row.cashBookType === 'Aided' ? 'Aided' : 'Un-Aided'}
+                      </span>
+                    )}
                   </td>
                   <td className="px-2 py-2.5 text-xs text-slate-500 whitespace-nowrap">{row.chequeNo}</td>
                   <td className="px-2 py-2.5 text-xs font-medium text-right whitespace-nowrap">
@@ -451,6 +463,7 @@ export function BankAccountsPage() {
         financialYear={settings.activeFinancialYear}
         openingBalance={openingBalances[selectedKey] ?? 0}
         onOpeningBalanceChange={handleOpeningBalanceChange}
+        showCashBookBadge={settings.activeCashBookType === 'Both'}
       />
 
     </div>
