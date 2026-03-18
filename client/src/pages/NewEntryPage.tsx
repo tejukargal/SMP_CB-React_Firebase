@@ -42,6 +42,24 @@ function SuggestDropdown({
   );
 }
 
+// ── Cheque number suggestion helper ───────────────────────────────────────────
+
+/**
+ * Given the previous chequeNo:
+ * - If it ends with digits → increment the numeric suffix (preserving leading-zero width)
+ *   e.g. "001234" → "001235", "CK001" → "CK002"
+ * - Otherwise → return it unchanged (e.g. "Neft", "Cash", "Petty Cash")
+ */
+function getNextChequeNo(prev: string): string {
+  const trimmed = prev.trim();
+  if (!trimmed) return '';
+  const match = trimmed.match(/^(.*?)(\d+)$/);
+  if (!match) return trimmed;
+  const [, prefix, numStr] = match;
+  const next = String(Number(numStr) + 1).padStart(numStr.length, '0');
+  return prefix + next;
+}
+
 // ── Date-grouped recent view ───────────────────────────────────────────────────
 
 /** Compact table header shared by receipt and payment panels */
@@ -237,6 +255,23 @@ export function NewEntryPage() {
     return result;
   }, [typeEntries, form.notes, form.headOfAccount]);
 
+  // ── Cheque No suggestion ──────────────────────────────────────────────────
+
+  // Most-recent entry for the current type (Receipt or Payment separately)
+  const chequeSuggestion = useMemo(() => {
+    if (typeEntries.length === 0) return '';
+    // typeEntries is already sorted by createdAt desc
+    const latest = typeEntries.find((e) => e.chequeNo.trim() !== '');
+    return latest?.chequeNo ? getNextChequeNo(latest.chequeNo) : '';
+  }, [typeEntries]);
+
+  const [chequeSuggestOpen, setChequeSuggestOpen] = useState(false);
+
+  const selectCheque = (val: string) => {
+    set('chequeNo', val);
+    setChequeSuggestOpen(false);
+  };
+
   const [hoaOpen, setHoaOpen]     = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
 
@@ -339,16 +374,28 @@ export function NewEntryPage() {
               error={errors.date}
             />
           </div>
-          <div className="sm:col-span-1">
+          <div className="sm:col-span-1 relative">
             <Input
               label="Cheque No"
               id="entry-cheque"
               type="text"
-              placeholder=""
+              placeholder={chequeSuggestion && !form.chequeNo ? chequeSuggestion : ''}
               value={form.chequeNo}
               onChange={(e) => set('chequeNo', toProperCase(e.target.value))}
+              onFocus={() => setChequeSuggestOpen(true)}
+              onBlur={() => setChequeSuggestOpen(false)}
+              onKeyDown={(e) => {
+                if (e.key === 'Tab' && chequeSuggestOpen && chequeSuggestion && !form.chequeNo) {
+                  e.preventDefault();
+                  selectCheque(chequeSuggestion);
+                }
+              }}
               error={errors.chequeNo}
+              autoComplete="off"
             />
+            {chequeSuggestOpen && chequeSuggestion && !form.chequeNo && (
+              <SuggestDropdown suggestions={[chequeSuggestion]} onSelect={selectCheque} />
+            )}
           </div>
           <div className="sm:col-span-1">
             <Input
