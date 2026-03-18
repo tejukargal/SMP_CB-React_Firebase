@@ -46,10 +46,12 @@ function toEntry(doc: { id: string; data(): Record<string, any> }): Entry {
 export function useDashboardData(financialYears: string[]): {
   fyStats:     Map<string, FYStats>;
   tickerItems: LedgerTickerItem[];
+  allEntries:  Entry[];
   loading:     boolean;
 } {
   const [fyStats,     setFyStats]     = useState<Map<string, FYStats>>(new Map());
   const [tickerItems, setTickerItems] = useState<LedgerTickerItem[]>([]);
+  const [allEntries,  setAllEntries]  = useState<Entry[]>([]);
   const [loading,     setLoading]     = useState(financialYears.length > 0);
 
   // Stringify to avoid re-fetching when a new array ref with same content is passed
@@ -66,6 +68,7 @@ export function useDashboardData(financialYears: string[]): {
     const fetchAll = async () => {
       const statsMap   = new Map<string, FYStats>();
       const allTicker: LedgerTickerItem[] = [];
+      const allFetchedEntries: Entry[] = [];
 
       await Promise.all(
         financialYears.map(async fy => {
@@ -76,6 +79,7 @@ export function useDashboardData(financialYears: string[]): {
 
           const aidedEntries   = aidedSnap.docs.map(toEntry);
           const unAidedEntries = unAidedSnap.docs.map(toEntry);
+          allFetchedEntries.push(...aidedEntries, ...unAidedEntries);
 
           const sum = (arr: Entry[], t: string) =>
             arr.filter(e => e.type === t).reduce((s, e) => s + e.amount, 0);
@@ -117,6 +121,7 @@ export function useDashboardData(financialYears: string[]): {
 
       setFyStats(statsMap);
       setTickerItems(allTicker);
+      setAllEntries(allFetchedEntries);
       setLoading(false);
     };
 
@@ -127,5 +132,5 @@ export function useDashboardData(financialYears: string[]): {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  return { fyStats, tickerItems, loading };
+  return { fyStats, tickerItems, allEntries, loading };
 }

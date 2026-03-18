@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { ImportSection } from './ImportSection';
 import { ResetSection } from './ResetSection';
 import { SalaryEntrySection } from './SalaryEntrySection';
+import { FeeEntrySection } from './FeeEntrySection';
 import { HeadOfAccountSection } from './HeadOfAccountSection';
 import { cn } from '@/utils/cn';
 import { getCurrentFinancialYear, generateFYLabel, isValidFY } from '@smp-cashbook/shared';
@@ -21,7 +22,7 @@ function getNextFY(existingYears: string[]): string {
 
 // ── Nav items ─────────────────────────────────────────────────────────────────
 
-type SectionId = 'general' | 'heads' | 'salary' | 'import' | 'danger';
+type SectionId = 'general' | 'heads' | 'salary' | 'fee' | 'import' | 'danger';
 
 const NAV_ITEMS: {
   id: SectionId;
@@ -68,6 +69,19 @@ const NAV_ITEMS: {
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
           d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'fee',
+    label: 'Quick Fee Entry',
+    description: 'Post college fee receipts',
+    accent: 'text-teal-500',
+    activeClass: 'bg-teal-50 border-teal-200 text-teal-700',
+    icon: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
+          d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
       </svg>
     ),
   },
@@ -306,6 +320,7 @@ export function SettingsPanel() {
           {active === 'general' && <GeneralSection />}
           {active === 'heads'   && <HeadOfAccountSection />}
           {active === 'salary'  && <SalaryEntrySection />}
+          {active === 'fee'     && <FeeEntrySection />}
           {active === 'import'  && <ImportSection />}
           {active === 'danger'  && <ResetSection />}
         </div>

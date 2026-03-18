@@ -677,7 +677,7 @@ export function HomePage() {
     [settings.financialYears, settings.activeFinancialYear],
   );
 
-  const { fyStats: histStats, tickerItems: histTicker, loading: hL } =
+  const { fyStats: histStats, tickerItems: histTicker, allEntries: histEntries, loading: hL } =
     useDashboardData(otherFYs);
 
   const activeStats = useMemo(() => computeStats(activeEntries), [activeEntries]);
@@ -708,12 +708,32 @@ export function HomePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poolSize]);
 
-  // Search
+  // Ledger search
   const [searchQuery, setSearchQuery] = useState('');
   const searchResults = useMemo(
     () => buildSearchResults(allTickerPool, searchQuery, settings.activeFinancialYear),
     [allTickerPool, searchQuery, settings.activeFinancialYear],
   );
+
+  // All entries across all FYs — for notes/amount search
+  const allEntries = useMemo(
+    () => [...activeEntries, ...histEntries],
+    [activeEntries, histEntries],
+  );
+
+  // Entry search (notes + amount, all FYs) — committed on Enter
+  const [entryInput, setEntryInput]   = useState('');
+  const [entryQuery, setEntryQuery]   = useState('');
+  const entryResults = useMemo<Entry[] | null>(() => {
+    const q = entryQuery.trim().toLowerCase();
+    if (!q) return null;
+    return allEntries.filter(e =>
+      (e.notes && e.notes.toLowerCase().includes(q)) ||
+      e.amount.toString().includes(q),
+    );
+  }, [allEntries, entryQuery]);
+
+  const isSearching = searchResults !== null || entryResults !== null;
 
   // Ledger detail modal
   const [modalLedger, setModalLedger] = useState<{ head: string; fy: string } | null>(null);
@@ -748,100 +768,235 @@ export function HomePage() {
         </Link>
       </div>
 
-      {/* ── Search bar ── */}
-      <div className="relative">
-        <svg
-          className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-          fill="none" viewBox="0 0 24 24" stroke="currentColor"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
-        <input
-          type="text"
-          placeholder={`Search ledgers across ${allFYs.length} financial year${allFYs.length !== 1 ? 's' : ''}…`}
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-9 text-sm
-            text-slate-700 shadow-sm placeholder:text-slate-400
-            focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100 transition"
-        />
-        {searchQuery && (
-          <button
-            onClick={() => setSearchQuery('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center
-              justify-center rounded-full bg-slate-200 hover:bg-slate-300 transition-colors"
-            aria-label="Clear search"
+      {/* ── Search bars ── */}
+      <div className="flex gap-3">
+        {/* Ledger search */}
+        <div className="relative flex-1">
+          <svg
+            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor"
           >
-            <svg className="h-3 w-3 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        )}
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            placeholder={`Search ledgers across ${allFYs.length} financial year${allFYs.length !== 1 ? 's' : ''}…`}
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-9 text-sm
+              text-slate-700 shadow-sm placeholder:text-slate-400
+              focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100 transition"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center
+                justify-center rounded-full bg-slate-200 hover:bg-slate-300 transition-colors"
+              aria-label="Clear ledger search"
+            >
+              <svg className="h-3 w-3 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Notes / Amount search */}
+        <div className="relative flex-1">
+          <svg
+            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0120 9.414V19a2 2 0 01-2 2z" />
+          </svg>
+          <input
+            type="text"
+            placeholder={`Search by notes or amount across ${allFYs.length} financial year${allFYs.length !== 1 ? 's' : ''}…`}
+            value={entryInput}
+            onChange={e => setEntryInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') setEntryQuery(entryInput); }}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-9 text-sm
+              text-slate-700 shadow-sm placeholder:text-slate-400
+              focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100 transition"
+          />
+          {entryInput && (
+            <button
+              onClick={() => { setEntryInput(''); setEntryQuery(''); }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center
+                justify-center rounded-full bg-slate-200 hover:bg-slate-300 transition-colors"
+              aria-label="Clear notes/amount search"
+            >
+              <svg className="h-3 w-3 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════════
-          SEARCH RESULTS — replaces dashboard when query is active
+          SEARCH RESULTS / DASHBOARD — cross-fade between the two panels
          ═══════════════════════════════════════════════════════════════════════ */}
-      {searchResults !== null ? (
-        <section className="flex flex-col gap-6">
+      <div className="relative">
+      {/* Search results panel */}
+      <div className={`transition-opacity duration-300 ease-in-out flex flex-col gap-8 ${
+        isSearching ? 'opacity-100' : 'pointer-events-none opacity-0 absolute inset-x-0 top-0'
+      }`}>
 
-          {/* Header row */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {(aL || hL) ? (
-                <span className="flex items-center gap-1.5 text-xs text-slate-400">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
-                  Loading some years…
-                </span>
-              ) : searchResults.length > 0 ? (
-                <span className="text-xs text-slate-500">
-                  <span className="font-semibold text-slate-700">{searchResults.length}</span>
-                  {' '}ledger{searchResults.length !== 1 ? 's' : ''} matched across{' '}
-                  <span className="font-semibold text-slate-700">{allFYs.length}</span> year{allFYs.length !== 1 ? 's' : ''}
-                </span>
-              ) : (
-                <span className="text-xs text-slate-400">No ledgers matched "{searchQuery}"</span>
-              )}
-            </div>
-          </div>
-
-          {/* Results list */}
-          {searchResults.length > 0 ? (
-            <div className="flex flex-col gap-6">
-              {searchResults.map(group =>
-                findBankDef(group.head) ? (
-                  <BankSearchResult key={group.head} group={group} onOpenModal={(head, fy) => setModalLedger({ head, fy })} />
+          {/* ── Ledger search results ── */}
+          {searchResults !== null && (
+            <section className="flex flex-col gap-6">
+              <div className="flex items-center gap-2">
+                {(aL || hL) ? (
+                  <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+                    Loading some years…
+                  </span>
+                ) : searchResults.length > 0 ? (
+                  <span className="text-xs text-slate-500">
+                    <span className="font-semibold text-slate-700">{searchResults.length}</span>
+                    {' '}ledger{searchResults.length !== 1 ? 's' : ''} matched across{' '}
+                    <span className="font-semibold text-slate-700">{allFYs.length}</span> year{allFYs.length !== 1 ? 's' : ''}
+                  </span>
                 ) : (
-                  <SearchResultGroup
-                    key={group.head}
-                    group={group}
-                    onOpenModal={(head, fy) => setModalLedger({ head, fy })}
-                  />
-                ),
-              )}
-            </div>
-          ) : !aL && !hL && (
-            /* Empty state */
-            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed
-              border-slate-200 py-16 text-center">
-              <svg className="h-8 w-8 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <p className="text-sm text-slate-400">
-                No ledgers found for <span className="font-medium text-slate-600">"{searchQuery}"</span>
-              </p>
-              <p className="text-xs text-slate-400">Try a different head of account name</p>
-            </div>
-          )}
-        </section>
+                  <span className="text-xs text-slate-400">No ledgers matched "{searchQuery}"</span>
+                )}
+              </div>
 
-      ) : (
-        /* ═══════════════════════════════════════════════════════════════════
-           NORMAL DASHBOARD — shown when search is empty
-           ═══════════════════════════════════════════════════════════════════ */
-        <>
+              {searchResults.length > 0 ? (
+                <div className="flex flex-col gap-6">
+                  {searchResults.map(group =>
+                    findBankDef(group.head) ? (
+                      <BankSearchResult key={group.head} group={group} onOpenModal={(head, fy) => setModalLedger({ head, fy })} />
+                    ) : (
+                      <SearchResultGroup
+                        key={group.head}
+                        group={group}
+                        onOpenModal={(head, fy) => setModalLedger({ head, fy })}
+                      />
+                    ),
+                  )}
+                </div>
+              ) : !aL && !hL && (
+                <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed
+                  border-slate-200 py-12 text-center">
+                  <svg className="h-8 w-8 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <p className="text-sm text-slate-400">
+                    No ledgers found for <span className="font-medium text-slate-600">"{searchQuery}"</span>
+                  </p>
+                  <p className="text-xs text-slate-400">Try a different head of account name</p>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* ── Notes / Amount search results ── */}
+          {entryResults !== null && (
+            <section className="flex flex-col gap-4">
+              <div className="flex items-center gap-2">
+                {(aL || hL) ? (
+                  <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />
+                    Loading entries…
+                  </span>
+                ) : entryResults.length > 0 ? (
+                  <span className="text-xs text-slate-500">
+                    <span className="font-semibold text-slate-700">{entryResults.length}</span>
+                    {' '}entr{entryResults.length !== 1 ? 'ies' : 'y'} matched across{' '}
+                    <span className="font-semibold text-slate-700">{allFYs.length}</span> year{allFYs.length !== 1 ? 's' : ''}
+                  </span>
+                ) : (
+                  <span className="text-xs text-slate-400">No entries matched "{entryQuery}"</span>
+                )}
+              </div>
+
+              {entryResults.length > 0 ? (
+                <div className="overflow-hidden rounded-xl border border-slate-200">
+                  <table className="w-full text-xs">
+                    <thead className="border-b border-slate-200 bg-slate-50">
+                      <tr>
+                        <th className="py-2.5 pl-4 pr-3 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-400">Date</th>
+                        <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-400">FY</th>
+                        <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-400">Type</th>
+                        <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-400">Book</th>
+                        <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-400">Head of Account</th>
+                        <th className="px-2 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">Amount</th>
+                        <th className="pl-2 pr-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-400">Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entryResults.map((e, i) => {
+                        const rowBg = i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40';
+                        const isActive = e.financialYear === settings.activeFinancialYear;
+                        return (
+                          <tr key={e.id} className={`${rowBg} border-b border-slate-100 last:border-0`}>
+                            <td className="py-2.5 pl-4 pr-3 font-medium text-slate-700 whitespace-nowrap">{formatDate(e.date)}</td>
+                            <td className="px-2 py-2.5 whitespace-nowrap">
+                              <span className={`text-[10px] font-semibold ${isActive ? 'text-blue-600' : 'text-slate-500'}`}>
+                                {e.financialYear}
+                              </span>
+                              {isActive && (
+                                <span className="ml-1 rounded-full bg-blue-100 px-1 py-0.5 text-[9px] font-semibold text-blue-600 leading-none">
+                                  Active
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-2 py-2.5">
+                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                e.type === 'Receipt' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                              }`}>
+                                {e.type}
+                              </span>
+                            </td>
+                            <td className="px-2 py-2.5">
+                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                e.cashBookType === 'Aided' ? 'bg-teal-100 text-teal-700' : 'bg-orange-100 text-orange-700'
+                              }`}>
+                                {e.cashBookType}
+                              </span>
+                            </td>
+                            <td className="px-2 py-2.5 text-slate-600 max-w-[160px] truncate">{e.headOfAccount}</td>
+                            <td className={`px-2 py-2.5 text-right font-semibold whitespace-nowrap ${
+                              e.type === 'Receipt' ? 'text-green-700' : 'text-red-600'
+                            }`}>
+                              {formatCurrency(e.amount)}
+                            </td>
+                            <td className="pl-2 pr-4 py-2.5 text-slate-500 max-w-[220px]">
+                              <span className="line-clamp-2 leading-relaxed">{e.notes || <span className="text-slate-300">—</span>}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : !aL && !hL && (
+                <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed
+                  border-slate-200 py-12 text-center">
+                  <svg className="h-8 w-8 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0120 9.414V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <p className="text-sm text-slate-400">
+                    No entries found for <span className="font-medium text-slate-600">"{entryQuery}"</span>
+                  </p>
+                  <p className="text-xs text-slate-400">Try a different note or amount value</p>
+                </div>
+              )}
+            </section>
+          )}
+
+        </div>
+
+      {/* Dashboard panel */}
+      <div className={`transition-opacity duration-300 ease-in-out flex flex-col gap-6 ${
+        !isSearching ? 'opacity-100' : 'pointer-events-none opacity-0 absolute inset-x-0 top-0'
+      }`}>
           {/* ── Active FY ── */}
           <section>
             <SectionHead title={`${settings.activeFinancialYear} — Active`} />
@@ -945,8 +1100,8 @@ export function HomePage() {
               <LedgerTicker items={tickerItems} />
             </section>
           )}
-        </>
-      )}
+      </div>
+      </div>
 
       {/* ── Ledger Detail Modal ── */}
       {modalLedger && (

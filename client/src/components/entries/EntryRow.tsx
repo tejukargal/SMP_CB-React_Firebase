@@ -10,7 +10,11 @@ interface EntryRowProps {
   entry:        Entry;
   compact?:     boolean;
   colorAmount?: boolean;
-  allEntries?:  Entry[]; // passed for voucher next-serial computation (Payment rows only)
+  allEntries?:  Entry[];
+  // bulk-select
+  selectMode?:  boolean;
+  selected?:    boolean;
+  onToggle?:    (id: string) => void;
 }
 
 export const EntryRow = memo(function EntryRow({
@@ -18,6 +22,9 @@ export const EntryRow = memo(function EntryRow({
   compact     = false,
   colorAmount = true,
   allEntries  = [],
+  selectMode  = false,
+  selected    = false,
+  onToggle,
 }: EntryRowProps) {
   const [detailOpen,  setDetailOpen]  = useState(false);
   const [voucherOpen, setVoucherOpen] = useState(false);
@@ -35,9 +42,9 @@ export const EntryRow = memo(function EntryRow({
   }, [menu]);
 
   const handleContextMenu = (e: React.MouseEvent) => {
+    if (selectMode) return;
     if (entry.type !== 'Payment') return;
     e.preventDefault();
-    // Clamp so the menu never overflows the viewport edges
     const menuW = 192;
     const menuH = 44;
     const x = Math.min(e.clientX, window.innerWidth  - menuW - 8);
@@ -48,10 +55,31 @@ export const EntryRow = memo(function EntryRow({
   return (
     <>
       <tr
-        onDoubleClick={() => setDetailOpen(true)}
+        onClick={selectMode ? () => onToggle?.(entry.id) : undefined}
+        onDoubleClick={!selectMode ? () => setDetailOpen(true) : undefined}
         onContextMenu={handleContextMenu}
-        className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
+        className={`border-b border-slate-100 transition-colors cursor-pointer
+          ${selectMode
+            ? selected
+              ? 'bg-blue-50 hover:bg-blue-100'
+              : 'hover:bg-slate-50'
+            : 'hover:bg-slate-50'
+          }`}
       >
+        {/* Checkbox (select mode only) */}
+        {selectMode && (
+          <td className="w-[36px] min-w-[36px] pl-3 pr-1 py-2.5">
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggle?.(entry.id)}
+              onClick={e => e.stopPropagation()}
+              className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 cursor-pointer
+                focus:ring-1 focus:ring-blue-400"
+            />
+          </td>
+        )}
+
         {/* Date — fixed 90px, no wrap */}
         <td className="w-[90px] min-w-[90px] py-2.5 pl-4 pr-2 text-xs text-slate-600 whitespace-nowrap">
           {formatDate(entry.date)}
@@ -124,7 +152,6 @@ export const EntryRow = memo(function EntryRow({
       {/* ── Right-click context menu (Payment entries only) ───────────────────── */}
       {menu && (
         <>
-          {/* Full-screen transparent backdrop — catches any outside click */}
           <tr style={{ display: 'none' }} />
           <div className="fixed inset-0 z-40" onClick={() => setMenu(null)} />
           <div
