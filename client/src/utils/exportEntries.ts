@@ -657,6 +657,243 @@ export function exportBankStatementPDF(p: BankStatementExportParams) {
   doc.save(`bank-statement-${safeName}-${p.financialYear.replace('/', '-')}.pdf`);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LEDGER COMPARISON PDF + EXCEL
+//
+// Mirrors the UI's ComparePairedSection logic:
+//  - receipt-only heads paired 1:1 (FIFO) with payment-only heads → side by side
+//  - mixed heads (both R & P) → their own R | P table
+//  - unpaired receipt-only or payment-only → half-table with other side blank
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Shared pairing logic for both PDF and Excel
+function buildCompareSections(heads: string[], entries: Entry[]) {
+  const sortArr = (arr: Entry[]) =>
+    [...arr].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
+
+  const headData = heads.map((head) => ({
+    head,
+    receipts: sortArr(entries.filter((e) => e.type === 'Receipt' && e.headOfAccount === head)),
+    payments: sortArr(entries.filter((e) => e.type === 'Payment' && e.headOfAccount === head)),
+  }));
+
+  const receiptOnly = headData.filter((h) => h.receipts.length > 0 && h.payments.length === 0);
+  const paymentOnly = headData.filter((h) => h.payments.length > 0 && h.receipts.length === 0);
+  const mixed       = headData.filter((h) => h.receipts.length > 0 && h.payments.length > 0);
+  const pairedCount = Math.min(receiptOnly.length, paymentOnly.length);
+
+  // Each section: leftLabel + leftRows on col 0-3, rightLabel + rightRows on col 4-7
+  type Section = { leftLabel: string; leftRows: Entry[]; rightLabel: string; rightRows: Entry[] };
+  const sections: Section[] = [];
+
+  for (let i = 0; i < pairedCount; i++) {
+    sections.push({ leftLabel: receiptOnly[i].head, leftRows: receiptOnly[i].receipts, rightLabel: paymentOnly[i].head, rightRows: paymentOnly[i].payments });
+  }
+  for (const { head, receipts, payments } of mixed) {
+    sections.push({ leftLabel: head, leftRows: receipts, rightLabel: head, rightRows: payments });
+  }
+  for (const { head, receipts } of receiptOnly.slice(pairedCount)) {
+    sections.push({ leftLabel: head, leftRows: receipts, rightLabel: '—', rightRows: [] });
+  }
+  for (const { head, payments } of paymentOnly.slice(pairedCount)) {
+    sections.push({ leftLabel: '—', leftRows: [], rightLabel: head, rightRows: payments });
+  }
+
+  return sections;
+}
+
+export function exportComparePDF(
+  heads: string[],
+  entries: Entry[],
+  financialYear: string,
+  cashBookType: string,
+) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.text('Ledger Comparison', PAGE_CX, 13, { align: 'center' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text(
+    `SMP Cash Book  ·  ${cashBookType}  ·  FY: ${financialYear}  ·  Generated: ${new Date().toLocaleDateString('en-IN')}`,
+    PAGE_CX, 19, { align: 'center' },
+  );
+  doc.setTextColor(0, 0, 0);
+
+  const sections = buildCompareSections(heads, entries);
+
+  // Receipt-side header green, payment-side header red
+  const C_RECEIPT_HDR: RGB = [21, 128, 61];  // green-700
+  const C_PAYMENT_HDR: RGB = [185, 28, 28];  // red-700
+
+  let currentY = 24;
+  let grandTotalR = 0;
+  let grandTotalP = 0;
+
+  for (const { leftLabel, leftRows, rightLabel, rightRows } of sections) {
+    if (currentY > 182) { doc.addPage(); currentY = 14; }
+
+    const totalLeft  = leftRows.reduce((s, e) => s + e.amount, 0);
+    const totalRight = rightRows.reduce((s, e) => s + e.amount, 0);
+    grandTotalR += totalLeft;
+    grandTotalP += totalRight;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body: any[] = [];
+    const maxLen = Math.max(leftRows.length, rightRows.length, 1);
+    for (let i = 0; i < maxLen; i++) {
+      const l = leftRows[i];
+      const r = rightRows[i];
+      body.push([
+        l ? formatDate(l.date)  : '', l ? (l.chequeNo || '—') : '', l ? fmtAmt(l.amount) : '', l ? (l.notes || '') : '',
+        r ? formatDate(r.date)  : '', r ? (r.chequeNo || '—') : '', r ? fmtAmt(r.amount) : '', r ? (r.notes || '') : '',
+      ]);
+    }
+    const totalRowIdx = body.length;
+    body.push(['Total', '', fmtAmt(totalLeft), '', 'Total', '', fmtAmt(totalRight), '']);
+
+    autoTable(doc, {
+      startY:     currentY,
+      margin:     { left: MARGIN, right: MARGIN },
+      tableWidth: 277,
+      head: [
+        [
+          { content: leftLabel,  colSpan: 4, styles: { halign: 'center' as const, fillColor: C_RECEIPT_HDR, textColor: C_WHITE, fontStyle: 'bold' as const, fontSize: 9 } },
+          { content: rightLabel, colSpan: 4, styles: { halign: 'center' as const, fillColor: C_PAYMENT_HDR, textColor: C_WHITE, fontStyle: 'bold' as const, fontSize: 9 } },
+        ],
+        ['Date', 'Chq', 'Amount', 'Notes', 'Date', 'Chq', 'Amount', 'Notes'],
+      ],
+      body,
+      styles:     BASE,
+      headStyles: HEAD_S,
+      columnStyles: {
+        0: { cellWidth: 20 },
+        1: { cellWidth: 16 },
+        2: { cellWidth: 24, halign: 'right' },
+        3: { cellWidth: 78, ...NOTES_COL_STYLE },
+        4: { cellWidth: 20 },
+        5: { cellWidth: 16 },
+        6: { cellWidth: 24, halign: 'right' },
+        7: { cellWidth: 79, ...NOTES_COL_STYLE },
+      },
+      didParseCell: (data) => {
+        if (data.section !== 'body') return;
+        if (data.row.index === totalRowIdx) {
+          data.cell.styles.fillColor = C_TOTAL;
+          data.cell.styles.fontStyle = 'bold';
+        } else {
+          data.cell.styles.fillColor = C_WHITE;
+        }
+      },
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    currentY = (doc as any).lastAutoTable.finalY + 8;
+  }
+
+  // Grand totals (only meaningful when multiple heads selected)
+  if (heads.length > 1) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text(`Grand Total Receipts: ${fmtAmt(grandTotalR)}`, MARGIN, currentY);
+    doc.text(`Grand Total Payments: ${fmtAmt(grandTotalP)}`, MARGIN, currentY + 6);
+    doc.text(`Net (R − P): ${fmtAmt(grandTotalR - grandTotalP)}`, MARGIN, currentY + 12);
+  }
+
+  doc.save(`ledger-comparison-${financialYear.replace('/', '-')}.pdf`);
+}
+
+export function exportCompareExcel(
+  heads: string[],
+  entries: Entry[],
+  financialYear: string,
+  cashBookType: string,
+) {
+  const wb = XLSX.utils.book_new();
+  const sections = buildCompareSections(heads, entries);
+
+  // ── Summary sheet ──
+  const summaryRows: (string | number)[][] = [
+    ['Ledger Comparison'],
+    [`SMP Cash Book — ${cashBookType}  |  FY: ${financialYear}`],
+    [],
+    ['Left (Receipts)', 'Left Total', 'Right (Payments)', 'Right Total', 'Net (L - R)'],
+  ];
+  let grandTotalR = 0;
+  let grandTotalP = 0;
+  for (const { leftLabel, leftRows, rightLabel, rightRows } of sections) {
+    const tL = leftRows.reduce((s, e) => s + e.amount, 0);
+    const tR = rightRows.reduce((s, e) => s + e.amount, 0);
+    grandTotalR += tL;
+    grandTotalP += tR;
+    summaryRows.push([leftLabel, tL, rightLabel, tR, tL - tR]);
+  }
+  summaryRows.push([]);
+  summaryRows.push(['Grand Total', grandTotalR, '', grandTotalP, grandTotalR - grandTotalP]);
+  const summaryWs = XLSX.utils.aoa_to_sheet(summaryRows);
+  summaryWs['!cols'] = [{ wch: 36 }, { wch: 14 }, { wch: 36 }, { wch: 14 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
+
+  // ── Per-section sheets ──
+  const usedNames = new Set<string>();
+
+  for (const { leftLabel, leftRows, rightLabel, rightRows } of sections) {
+    const totalLeft  = leftRows.reduce((s, e) => s + e.amount, 0);
+    const totalRight = rightRows.reduce((s, e) => s + e.amount, 0);
+    const maxLen = Math.max(leftRows.length, rightRows.length, 1);
+
+    // Row 4 (0-indexed row 3): head name labels spanning 4 cols each
+    // Row 5 (0-indexed row 4): column sub-headers
+    const rows: (string | number)[][] = [
+      ['Ledger Comparison'],
+      [`SMP Cash Book — ${cashBookType}  |  FY: ${financialYear}`],
+      [],
+      [leftLabel, '', '', '', rightLabel, '', '', ''],   // ← merged in !merges
+      ['Date', 'Chq', 'Amount', 'Notes', 'Date', 'Chq', 'Amount', 'Notes'],
+    ];
+
+    for (let i = 0; i < maxLen; i++) {
+      const l = leftRows[i];
+      const r = rightRows[i];
+      rows.push([
+        l ? formatDate(l.date) : '', l ? (l.chequeNo || '') : '', l ? l.amount : '', l ? (l.notes || '') : '',
+        r ? formatDate(r.date) : '', r ? (r.chequeNo || '') : '', r ? r.amount : '', r ? (r.notes || '') : '',
+      ]);
+    }
+    rows.push([]);
+    rows.push(['Receipts Total:', '', totalLeft, '', 'Payments Total:', '', totalRight, '']);
+    rows.push(['Net (L - R):', '', totalLeft - totalRight, '', '', '', '', '']);
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [
+      { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 40 },
+      { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 40 },
+    ];
+    // Merge head-name cells across columns 0-3 and 4-7 in row index 3
+    ws['!merges'] = [
+      { s: { r: 3, c: 0 }, e: { r: 3, c: 3 } },
+      { s: { r: 3, c: 4 }, e: { r: 3, c: 7 } },
+    ];
+
+    // Build a unique sheet name ≤ 31 chars
+    const raw = leftLabel === rightLabel
+      ? leftLabel
+      : `${leftLabel.slice(0, 13)} vs ${rightLabel.slice(0, 13)}`;
+    let sheetName = raw.replace(/[\\/*?[\]:]/g, '').slice(0, 31);
+    if (usedNames.has(sheetName)) {
+      sheetName = sheetName.slice(0, 28) + `_${usedNames.size}`;
+    }
+    usedNames.add(sheetName);
+
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  }
+
+  XLSX.writeFile(wb, `ledger-comparison-${financialYear.replace('/', '-')}.xlsx`);
+}
+
 export function exportBankStatementExcel(p: BankStatementExportParams) {
   const cbStr = `${fmtAmt(Math.abs(p.closingBalance))}${p.closingBalance < 0 ? ' Dr' : ''}`;
 

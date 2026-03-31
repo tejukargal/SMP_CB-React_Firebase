@@ -5,6 +5,11 @@ import { useToast } from '@/context/ToastContext';
 import { formatCurrency } from '@/utils/formatCurrency';
 import { formatDate } from '@/utils/formatDate';
 import { apiGetBankOpeningBalances, apiSetBankOpeningBalance } from '@/api/bankBalances';
+import {
+  apiGetBankReconciliation,
+  apiSetBankReconciliationDate,
+  type AllBankReconciliation,
+} from '@/api/bankReconciliation';
 import { EntrySkeleton } from '@/components/entries/EntrySkeleton';
 import { exportBankStatementPDF, exportBankStatementExcel } from '@/utils/exportEntries';
 import type { Entry } from '@smp-cashbook/shared';
@@ -38,14 +43,12 @@ const BANK_ACCOUNTS = [
 type BankKey = (typeof BANK_ACCOUNTS)[number]['key'];
 type BankColor = (typeof BANK_ACCOUNTS)[number]['color'];
 
-/** Case-insensitive fuzzy match — handles suffix/case variations. */
 function matchesBankHead(entryHead: string, bankHead: string): boolean {
   const a = entryHead.toLowerCase().trim();
   const b = bankHead.toLowerCase().trim();
   return a === b || a.includes(b) || b.includes(a);
 }
 
-/** "01 Apr YYYY" for a financial year like "2025-26" */
 function openingDateLabel(financialYear: string): string {
   return `01 Apr ${financialYear.split('-')[0]}`;
 }
@@ -56,9 +59,11 @@ interface StatementRow {
   narration:    string;
   chequeNo:     string;
   cashBookType: import('@smp-cashbook/shared').CashBookType;
-  debit:        number;   // Receipt → cash drawn FROM bank → balance ↓
-  credit:       number;   // Payment → cash deposited TO bank → balance ↑
-  balance:      number;   // running balance after this row
+  debit:          number;
+  credit:         number;
+  balance:        number;
+  bankDate:       string | null;
+  isCleared:      boolean;
 }
 
 // ── Color maps ────────────────────────────────────────────────────────────────
@@ -177,10 +182,135 @@ function OpeningBalanceEditor({
   );
 }
 
+// ── Bank Date Cell (inline reconciliation editor) ─────────────────────────────
+
+/** Converts "dd/mm/yyyy" → "yyyy-mm-dd". Returns null if invalid. */
+function parseDMY(raw: string): string | null {
+  const m = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+  const [, dd, mm, yyyy] = m;
+  const d = parseInt(dd, 10), mo = parseInt(mm, 10), y = parseInt(yyyy, 10);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const iso = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+  // validate via Date
+  const dt = new Date(iso);
+  if (isNaN(dt.getTime()) || dt.getDate() !== d || dt.getMonth() + 1 !== mo) return null;
+  return iso;
+}
+
+function BankDateCell({
+  bankDate,
+  onSave,
+}: {
+  bankDate: string | null;
+  onSave: (date: string | null) => Promise<void>;
+}) {
+  const [editing, setEditing]   = useState(false);
+  const [inputVal, setInputVal] = useState('');
+  const [error, setError]       = useState(false);
+  const [saving, setSaving]     = useState(false);
+
+  const openEdit = () => {
+    // Pre-fill with existing date in dd/mm/yyyy if present
+    setInputVal(bankDate ? formatDate(bankDate) : '');
+    setError(false);
+    setEditing(true);
+  };
+
+  const handleCommit = async () => {
+    const trimmed = inputVal.trim();
+    if (!trimmed) {
+      // empty → clear the date
+      setSaving(true);
+      await onSave(null);
+      setSaving(false);
+      setEditing(false);
+      return;
+    }
+    const iso = parseDMY(trimmed);
+    if (!iso) { setError(true); return; }
+    setSaving(true);
+    await onSave(iso);
+    setSaving(false);
+    setEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter')  handleCommit();
+    if (e.key === 'Escape') setEditing(false);
+  };
+
+  const handleClear = async (ev: React.MouseEvent) => {
+    ev.stopPropagation();
+    setSaving(true);
+    await onSave(null);
+    setSaving(false);
+  };
+
+  if (saving) return <span className="text-[10px] text-teal-500">Saving…</span>;
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1">
+        <input
+          type="text"
+          value={inputVal}
+          placeholder="dd/mm/yyyy"
+          onChange={(e) => { setInputVal(e.target.value); setError(false); }}
+          onKeyDown={handleKeyDown}
+          onBlur={handleCommit}
+          autoFocus
+          className={`w-24 rounded border px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 text-slate-700
+            ${error
+              ? 'border-red-400 focus:ring-red-400 bg-red-50'
+              : 'border-teal-300 focus:ring-teal-400'}`}
+        />
+        {error && (
+          <span className="text-[10px] text-red-500 whitespace-nowrap">dd/mm/yyyy</span>
+        )}
+      </div>
+    );
+  }
+
+  if (bankDate) {
+    return (
+      <div
+        className="flex items-center gap-1 group cursor-pointer"
+        onClick={openEdit}
+        title="Click to edit bank date"
+      >
+        <svg className="h-3 w-3 text-teal-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+        </svg>
+        <span className="text-[11px] text-teal-700 font-medium">{formatDate(bankDate)}</span>
+        <button
+          onClick={handleClear}
+          title="Remove bank date (mark as uncleared)"
+          className="ml-0.5 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500
+            transition-opacity text-[11px] leading-none"
+        >
+          ×
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={openEdit}
+      className="text-[11px] text-slate-300 hover:text-teal-500 transition-colors whitespace-nowrap"
+      title="Set actual bank clearing date"
+    >
+      + Set date
+    </button>
+  );
+}
+
 // ── Statement table ───────────────────────────────────────────────────────────
 
 function StatementTable({
-  bank, entries, financialYear, openingBalance, onOpeningBalanceChange, showCashBookBadge,
+  bank, entries, financialYear, openingBalance, onOpeningBalanceChange,
+  showCashBookBadge, reconciledDates, onSetBankDate, reconcileMode,
 }: {
   bank: (typeof BANK_ACCOUNTS)[number];
   entries: Entry[];
@@ -188,6 +318,9 @@ function StatementTable({
   openingBalance: number;
   onOpeningBalanceChange: (key: BankKey, bal: number) => void;
   showCashBookBadge: boolean;
+  reconciledDates: Record<string, string>;
+  onSetBankDate: (entryId: string, bankDate: string | null) => Promise<void>;
+  reconcileMode: boolean;
 }) {
   const bankEntries = useMemo(
     () =>
@@ -195,77 +328,85 @@ function StatementTable({
         .filter((e) => matchesBankHead(e.headOfAccount, bank.headOfAccount))
         .sort((a, b) => {
           if (a.date !== b.date) return a.date.localeCompare(b.date);
-          // Within same date: Credits (Payment) before Debits (Receipt),
-          // and among Credits sort highest first — avoids interim negative balance.
           const aCredit = a.type === 'Payment' ? 1 : 0;
           const bCredit = b.type === 'Payment' ? 1 : 0;
           if (aCredit !== bCredit) return bCredit - aCredit;
-          if (aCredit === 1) return b.amount - a.amount; // largest credit first
-          return a.amount - b.amount;                    // smallest debit first
+          if (aCredit === 1) return b.amount - a.amount;
+          return a.amount - b.amount;
         }),
     [entries, bank.headOfAccount],
   );
 
   const rows: StatementRow[] = useMemo(() => {
+    // In reconcile mode: sort by effective date (bank date if cleared, cash-book date otherwise)
+    // so reconciled transactions move to their bank-date position and balance updates accordingly.
+    // In normal mode: keep cash-book date order.
+    const displayEntries = reconcileMode
+      ? [...bankEntries].sort((a, b) => {
+          const aDate = reconciledDates[a.id] ?? a.date;
+          const bDate = reconciledDates[b.id] ?? b.date;
+          if (aDate !== bDate) return aDate.localeCompare(bDate);
+          const aCredit = a.type === 'Payment' ? 1 : 0;
+          const bCredit = b.type === 'Payment' ? 1 : 0;
+          if (aCredit !== bCredit) return bCredit - aCredit;
+          if (aCredit === 1) return b.amount - a.amount;
+          return a.amount - b.amount;
+        })
+      : bankEntries;
+
     let running = openingBalance;
-    return bankEntries.map((e) => {
+    return displayEntries.map((e) => {
       const debit  = e.type === 'Receipt' ? e.amount : 0;
       const credit = e.type === 'Payment' ? e.amount : 0;
-      // Receipt = cash drawn FROM bank = Withdrawal = Debit → balance decreases
-      // Payment = cash deposited TO bank = Deposit  = Credit → balance increases
-      running = running + credit - debit;
+      running += credit - debit;
+      const bankDate  = reconciledDates[e.id] ?? null;
+      const isCleared = !!bankDate;
       return {
-        id:           e.id,
-        date:         e.date,
-        narration:    e.notes.trim() || '—',
-        chequeNo:     e.chequeNo.trim() || '—',
-        cashBookType: e.cashBookType,
+        id: e.id, date: e.date, narration: e.notes.trim() || '—',
+        chequeNo: e.chequeNo.trim() || '—', cashBookType: e.cashBookType,
         debit, credit, balance: running,
+        bankDate, isCleared,
       };
     });
-  }, [bankEntries, openingBalance]);
+  }, [bankEntries, openingBalance, reconciledDates, reconcileMode]);
 
   const totalDebit     = useMemo(() => rows.reduce((s, r) => s + r.debit,  0), [rows]);
   const totalCredit    = useMemo(() => rows.reduce((s, r) => s + r.credit, 0), [rows]);
   const closingBalance = openingBalance + totalCredit - totalDebit;
 
   const exportParams = useMemo(() => ({
-    bankLabel:      bank.label,
-    financialYear,
-    openingBalance,
+    bankLabel: bank.label, financialYear, openingBalance,
     openingDateStr: openingDateLabel(financialYear),
     rows: rows.map(r => ({
       date: r.date, narration: r.narration, chequeNo: r.chequeNo,
       debit: r.debit, credit: r.credit, balance: r.balance,
     })),
-    totalDebit,
-    totalCredit,
-    closingBalance,
+    totalDebit, totalCredit, closingBalance,
   }), [bank.label, financialYear, openingBalance, rows, totalDebit, totalCredit, closingBalance]);
 
   const theadBg     = THEAD_BG[bank.color];
   const theadBorder = THEAD_BORDER[bank.color];
 
   return (
-    // NOTE: no overflow-hidden here — it would create a new scroll container and break sticky children
     <div className={`rounded-b-xl border-x border-b ${SECTION_BORDER[bank.color]}`}>
 
-      {/* Opening balance editor — sticky just below the tab bar (tab bar ≈ 54 px) */}
-      <div className="sticky top-[54px] z-10 px-5 py-2.5 bg-white border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
+      {/* Sticky bar: opening balance + closing balance + reconcile toggle + exports */}
+      <div className="sticky top-[54px] z-10 px-5 py-2.5 bg-white border-b border-slate-100
+        flex items-center justify-between flex-wrap gap-3">
         <OpeningBalanceEditor
           accountKey={bank.key}
           financialYear={financialYear}
           value={openingBalance}
           onSaved={(bal) => onOpeningBalanceChange(bank.key, bal)}
         />
-        {/* Right-side: closing balance + export buttons */}
-        <div className="flex items-center gap-2">
-          {/* Closing balance mini chip */}
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Closing balance chip */}
           <div className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 ${
             closingBalance >= 0 ? 'border-blue-200 bg-blue-50' : 'border-orange-200 bg-orange-50'
           }`}>
             <span className={`text-xs ${closingBalance >= 0 ? 'text-blue-500' : 'text-orange-500'}`}>
-              Closing Balance
+              Book Balance
             </span>
             <span className={`text-xs font-semibold ${closingBalance >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
               {formatCurrency(Math.abs(closingBalance))}{closingBalance < 0 ? ' Dr' : ''}
@@ -313,14 +454,13 @@ function StatementTable({
               <col className="w-[100px]" />
               <col />
               <col className="w-[120px]" />
-              <col className="w-[148px]" />
-              <col className="w-[148px]" />
-              <col className="w-[148px]" />
+              <col className="w-[140px]" />
+              <col className="w-[140px]" />
+              <col className="w-[140px]" />
+              {reconcileMode && <col className="w-[148px]" />}
             </colgroup>
 
-            {/* Both rows sticky together — tab bar ≈54px + opening-balance bar ≈44px = 98px */}
             <thead className="sticky top-[98px] z-[5]">
-              {/* Column headers */}
               <tr className={`border-b ${theadBorder} ${theadBg}`}>
                 <th className="py-2 pl-5 pr-2 text-xs font-semibold text-slate-600 whitespace-nowrap">Date</th>
                 <th className="px-2 py-2 text-xs font-semibold text-slate-600 whitespace-nowrap">Narration</th>
@@ -331,11 +471,16 @@ function StatementTable({
                 <th className="px-2 py-2 text-xs font-semibold text-slate-600 text-right whitespace-nowrap">
                   Credit (Payment)
                 </th>
-                <th className="pl-2 pr-5 py-2 text-xs font-semibold text-slate-600 text-right whitespace-nowrap">
+                <th className="pl-2 pr-2 py-2 text-xs font-semibold text-slate-600 text-right whitespace-nowrap">
                   Balance
                 </th>
+                {reconcileMode && (
+                  <th className="pl-2 pr-5 py-2 text-xs font-semibold text-teal-600 whitespace-nowrap">
+                    Bank Date
+                  </th>
+                )}
               </tr>
-              {/* Opening balance row — part of thead so it sticks with the headers */}
+              {/* Opening balance row */}
               <tr className={`border-b-2 ${theadBorder} bg-blue-50/60`}>
                 <td className="py-2 pl-5 pr-2 text-xs text-slate-500 whitespace-nowrap">
                   {openingDateLabel(financialYear)}
@@ -347,15 +492,23 @@ function StatementTable({
                 <td className="px-2 py-2 text-xs font-semibold text-right text-blue-700 whitespace-nowrap">
                   {formatCurrency(openingBalance)}
                 </td>
-                <td className="pl-2 pr-5 py-2 text-xs font-semibold text-right text-blue-700 whitespace-nowrap">
+                <td className="pl-2 pr-2 py-2 text-xs font-semibold text-right text-blue-700 whitespace-nowrap">
                   {formatCurrency(openingBalance)}
                 </td>
+                {reconcileMode && <td className="pl-2 pr-5" />}
               </tr>
             </thead>
 
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                <tr
+                  key={row.id}
+                  className={`border-b border-slate-100 transition-colors ${
+                    reconcileMode && row.isCleared
+                      ? 'bg-teal-50/40 hover:bg-teal-50'
+                      : 'hover:bg-slate-50'
+                  }`}
+                >
                   <td className="py-2.5 pl-5 pr-2 text-xs text-slate-600 whitespace-nowrap">
                     {formatDate(row.date)}
                   </td>
@@ -382,16 +535,25 @@ function StatementTable({
                       ? <span className="text-red-700">{formatCurrency(row.credit)}</span>
                       : <span className="text-slate-300">—</span>}
                   </td>
-                  <td className={`pl-2 pr-5 py-2.5 text-xs font-semibold text-right whitespace-nowrap ${
+                  <td className={`pl-2 pr-2 py-2.5 text-xs font-semibold text-right whitespace-nowrap ${
                     row.balance >= 0 ? 'text-slate-800' : 'text-orange-700'
                   }`}>
                     {formatCurrency(Math.abs(row.balance))}{row.balance < 0 ? ' Dr' : ''}
                   </td>
+                  {reconcileMode && (
+                    <td className="pl-2 pr-5 py-2.5">
+                      <BankDateCell
+                        bankDate={row.bankDate}
+                        onSave={(date) => onSetBankDate(row.id, date)}
+                      />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
 
             <tfoot>
+              {/* Totals row */}
               <tr className="border-t-2 border-slate-300 bg-slate-50">
                 <td colSpan={3} className="py-2.5 pl-5 pr-2 text-xs font-semibold text-slate-600 whitespace-nowrap">
                   {rows.length} transaction{rows.length !== 1 ? 's' : ''}
@@ -402,14 +564,16 @@ function StatementTable({
                 <td className="px-2 py-2.5 text-xs font-bold text-right text-red-700 whitespace-nowrap">
                   {formatCurrency(totalCredit)}
                 </td>
-                <td className={`pl-2 pr-5 py-2.5 text-xs font-bold text-right whitespace-nowrap ${
+                <td className={`pl-2 pr-2 py-2.5 text-xs font-bold text-right whitespace-nowrap ${
                   closingBalance >= 0 ? 'text-blue-700' : 'text-orange-700'
                 }`}>
                   {formatCurrency(Math.abs(closingBalance))}{closingBalance < 0 ? ' Dr' : ''}
                 </td>
+                {reconcileMode && <td className="pl-2 pr-5" />}
               </tr>
             </tfoot>
           </table>
+
         </div>
       )}
     </div>
@@ -431,6 +595,12 @@ export function BankAccountsPage() {
   });
   const [balancesLoading, setBalancesLoading] = useState(true);
 
+  // Reconciliation state
+  const [allReconData, setAllReconData] = useState<AllBankReconciliation>({});
+  const [reconLoading, setReconLoading] = useState(true);
+  const [reconcileMode, setReconcileMode] = useState(false);
+
+  // Load opening balances
   useEffect(() => {
     setBalancesLoading(true);
     apiGetBankOpeningBalances(settings.activeFinancialYear)
@@ -439,12 +609,47 @@ export function BankAccountsPage() {
       .finally(() => setBalancesLoading(false));
   }, [settings.activeFinancialYear]);
 
+  // Load reconciliation data
+  useEffect(() => {
+    setReconLoading(true);
+    apiGetBankReconciliation(settings.activeFinancialYear)
+      .then(setAllReconData)
+      .catch(console.error)
+      .finally(() => setReconLoading(false));
+  }, [settings.activeFinancialYear]);
+
   const handleOpeningBalanceChange = useCallback(
     (key: BankKey, balance: number) => setOpeningBalances((prev) => ({ ...prev, [key]: balance })),
     [],
   );
 
-  // Per-account transaction counts for tab badges
+  const { addToast } = useToast();
+
+  const handleSetBankDate = useCallback(
+    async (entryId: string, bankDate: string | null) => {
+      try {
+        await apiSetBankReconciliationDate(
+          settings.activeFinancialYear,
+          selectedKey,
+          entryId,
+          bankDate,
+        );
+        setAllReconData((prev) => {
+          const bankData = { ...(prev[selectedKey] ?? {}) };
+          if (bankDate) {
+            bankData[entryId] = bankDate;
+          } else {
+            delete bankData[entryId];
+          }
+          return { ...prev, [selectedKey]: bankData };
+        });
+      } catch (err: unknown) {
+        addToast(err instanceof Error ? err.message : 'Failed to save bank date', 'error');
+      }
+    },
+    [settings.activeFinancialYear, selectedKey, addToast],
+  );
+
   const countByKey = useMemo(() => {
     const map: Record<string, number> = {};
     for (const bank of BANK_ACCOUNTS) {
@@ -454,8 +659,9 @@ export function BankAccountsPage() {
   }, [entries]);
 
   const selectedBank = BANK_ACCOUNTS.find((b) => b.key === selectedKey)!;
+  const currentReconData = allReconData[selectedKey] ?? {};
 
-  if (entriesLoading || balancesLoading) {
+  if (entriesLoading || balancesLoading || reconLoading) {
     return (
       <div className="w-full animate-fade-in pb-6">
         <div className="rounded-lg border border-slate-200 p-3"><EntrySkeleton /></div>
@@ -466,7 +672,7 @@ export function BankAccountsPage() {
   return (
     <div className="w-full pb-6">
 
-      {/* ── Sticky top bar: account tabs + context ── */}
+      {/* ── Sticky top bar: account tabs + reconcile toggle + context ── */}
       <div className="sticky top-0 z-20 -mx-6 px-6 py-3 bg-slate-50/95 backdrop-blur-sm border-b border-slate-200 mb-0">
         <div className="flex items-center justify-between gap-4">
 
@@ -499,11 +705,31 @@ export function BankAccountsPage() {
             })}
           </div>
 
-          {/* FY + cashBookType context */}
-          <div className="flex items-center gap-1.5 text-xs text-slate-400 shrink-0">
-            <span className="font-medium text-slate-600">{settings.activeFinancialYear}</span>
-            <span>·</span>
-            <span>{settings.activeCashBookType}</span>
+          <div className="flex items-center gap-3 shrink-0">
+            {/* Reconcile toggle */}
+            <button
+              onClick={() => setReconcileMode((m) => !m)}
+              className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium
+                transition-colors whitespace-nowrap ${
+                reconcileMode
+                  ? 'bg-teal-600 text-white border-teal-600 hover:bg-teal-700'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-teal-300 hover:text-teal-600'
+              }`}
+              title="Toggle Bank Reconciliation mode"
+            >
+              <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Reconcile
+            </button>
+
+            {/* FY + cashBookType context */}
+            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+              <span className="font-medium text-slate-600">{settings.activeFinancialYear}</span>
+              <span>·</span>
+              <span>{settings.activeCashBookType}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -516,6 +742,9 @@ export function BankAccountsPage() {
         openingBalance={openingBalances[selectedKey] ?? 0}
         onOpeningBalanceChange={handleOpeningBalanceChange}
         showCashBookBadge={settings.activeCashBookType === 'Both'}
+        reconciledDates={currentReconData}
+        onSetBankDate={handleSetBankDate}
+        reconcileMode={reconcileMode}
       />
 
     </div>

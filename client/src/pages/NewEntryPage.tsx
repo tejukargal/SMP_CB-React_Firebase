@@ -8,7 +8,7 @@ import { useSettings } from '@/context/SettingsContext';
 import { useToast } from '@/context/ToastContext';
 import { apiCreateEntry } from '@/api/entries';
 import { toProperCase } from '@smp-cashbook/shared';
-import { todayISO, formatDate } from '@/utils/formatDate';
+import { formatDate } from '@/utils/formatDate';
 import { formatCurrency } from '@/utils/formatCurrency';
 import { useEntries } from '@/hooks/useEntries';
 import { EntryRow } from '@/components/entries/EntryRow';
@@ -123,7 +123,7 @@ function DatePanel({ entries, type }: { entries: Entry[]; type: 'Receipt' | 'Pay
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EMPTY_FORM: EntryFormData = {
-  date: todayISO(),
+  date: '',
   chequeNo: '',
   amount: '',
   headOfAccount: '',
@@ -323,7 +323,7 @@ export function NewEntryPage() {
         cashBookType: settings.activeCashBookType,
       });
       addToast(`${form.type} entry added successfully`, 'success');
-      setForm({ ...EMPTY_FORM, type: form.type, date: todayISO() });
+      setForm({ ...EMPTY_FORM, type: form.type });
       setErrors({});
     } catch (err: unknown) {
       addToast(err instanceof Error ? err.message : 'Failed to save entry', 'error');
@@ -465,7 +465,7 @@ export function NewEntryPage() {
             </Button>
             <button
               type="button"
-              onClick={() => { setForm({ ...EMPTY_FORM, type: form.type, date: todayISO() }); setErrors({}); }}
+              onClick={() => { setForm({ ...EMPTY_FORM, type: form.type }); setErrors({}); }}
               className="h-[28px] rounded-md border border-dashed border-slate-300 bg-white px-4 text-xs font-medium text-slate-400 hover:border-slate-400 hover:text-slate-600 transition-colors"
             >
               Reset
@@ -506,7 +506,7 @@ export function NewEntryPage() {
           </div>
         ) : (
           <div className="flex flex-col gap-5">
-            {recentGroups.map(({ date, dateEntries, openingBalance, closingBalance, dayR, dayP }) => {
+            {[...recentGroups].reverse().map(({ date, dateEntries, openingBalance, closingBalance, dayR, dayP }) => {
               const receipts = dateEntries.filter((e) => e.type === 'Receipt');
               const payments = dateEntries.filter((e) => e.type === 'Payment');
               const receiptGrandTotal = openingBalance + dayR;

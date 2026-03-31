@@ -1,0 +1,20 @@
+{
+  "name": "smp-cashbook-functions",
+  "version": "1.0.0",
+  "description": "Firebase Cloud Functions for SMP CashBook",
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --outfile=lib/index.js --external:firebase-admin --external:firebase-functions"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.3.0",
+    "firebase-functions": "^6.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.4",
+    "typescript": "^5.4.5"
+  }
+}

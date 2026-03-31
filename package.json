@@ -12,7 +12,9 @@
     "build": "npm run build -w shared && npm run build -w server && npm run build -w client",
     "build:shared": "npm run build -w shared",
     "build:server": "npm run build -w server",
-    "build:client": "npm run build -w client"
+    "build:client": "npm run build -w client",
+    "build:functions": "npm install --prefix functions && npm run build --prefix functions",
+    "deploy:firebase": "npm run build -w client && npm run build:functions && npx firebase-tools deploy --only hosting,functions --force --project smp-cashbook"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

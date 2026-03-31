@@ -5,7 +5,7 @@ import { EntryDetailModal } from '@/components/entries/EntryDetailModal';
 import { EntrySkeleton } from '@/components/entries/EntrySkeleton';
 import { formatCurrency } from '@/utils/formatCurrency';
 import { formatDate } from '@/utils/formatDate';
-import { exportLedgerPDF, exportLedgerExcel } from '@/utils/exportEntries';
+import { exportLedgerPDF, exportLedgerExcel, exportComparePDF, exportCompareExcel } from '@/utils/exportEntries';
 import type { Entry } from '@smp-cashbook/shared';
 
 // Sticky offsets:
@@ -434,6 +434,8 @@ function LedgerCompare({
 }: {
   heads: string[]; entries: Entry[]; onBack: () => void;
 }) {
+  const { settings } = useSettings();
+  const { activeFinancialYear: fy, activeCashBookType: cbt } = settings;
   const label = `Comparing ${heads.length} ledger${heads.length > 1 ? 's' : ''}`;
 
   // Categorise each selected head
@@ -454,9 +456,42 @@ function LedgerCompare({
   const unpairedR    = receiptOnly.slice(pairedCount);
   const unpairedP    = paymentOnly.slice(pairedCount);
 
+  const compareExportActions = (
+    <div className="flex items-center gap-2 ml-auto">
+      <button
+        type="button"
+        onClick={() => exportComparePDF(heads, entries.filter((e) => heads.includes(e.headOfAccount)), fy, cbt)}
+        title="Export comparison as PDF"
+        className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
+          px-2.5 py-1.5 text-xs font-medium text-slate-600
+          hover:border-red-300 hover:text-red-600 transition-colors"
+      >
+        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+        PDF
+      </button>
+      <button
+        type="button"
+        onClick={() => exportCompareExcel(heads, entries.filter((e) => heads.includes(e.headOfAccount)), fy, cbt)}
+        title="Export comparison as Excel"
+        className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
+          px-2.5 py-1.5 text-xs font-medium text-slate-600
+          hover:border-green-300 hover:text-green-600 transition-colors"
+      >
+        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z" />
+        </svg>
+        Excel
+      </button>
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
-      <BackBar label={label} onBack={onBack} />
+      <BackBar label={label} onBack={onBack} actions={compareExportActions} />
 
       {/* Grand totals summary bar */}
       {heads.length > 1 && (() => {
