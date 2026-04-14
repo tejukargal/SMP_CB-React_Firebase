@@ -80,12 +80,9 @@ Report the short commit SHA and branch after pushing.
 
 ---
 
-## Step 7 — Firebase deploy (only when requested)
+## Step 7 — Firebase deploy (always run)
 
-Run this step **only if** the user's message contained the word "deploy"
-(e.g. "commit & deploy", "push and deploy", "ship to production").
-
-Skip this step for plain "commit & push" / "commit changes" requests.
+Run this step **after every successful push**, regardless of what the user said.
 
 **7a — Build the client:**
 
@@ -118,13 +115,6 @@ Report the hosting URL from the deploy output when done.
 ---
 
 ## Example output to user
-
-After a successful commit + push (no deploy):
-
-> Committed `abc1234` — "feat: add PDF export for ledger heads list"
-> Pushed to `tejukargal/SMP_CB-React_Firebase` → main ✓
-
-After commit + push + deploy:
 
 > Committed `abc1234` — "feat: add PDF export for ledger heads list"
 > Pushed to `tejukargal/SMP_CB-React_Firebase` → main ✓
