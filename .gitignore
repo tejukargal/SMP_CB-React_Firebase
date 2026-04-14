@@ -7,5 +7,5 @@ functions/lib/
 *.log
 *service-account*.json
 .netlify/
-.claude/
+.claude/settings.local.json
 *.zip
