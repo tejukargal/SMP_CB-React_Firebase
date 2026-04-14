@@ -894,6 +894,180 @@ export function exportCompareExcel(
   XLSX.writeFile(wb, `ledger-comparison-${financialYear.replace('/', '-')}.xlsx`);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LEDGER LIST PDF + EXCEL
+//
+// Exports the default Ledgers view: Receipt & Payment heads side-by-side,
+// each with their entry count and total, plus grand totals and net balance.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function exportLedgerListPDF(
+  receiptLedgers: Array<{ head: string; total: number; count: number }>,
+  paymentLedgers: Array<{ head: string; total: number; count: number }>,
+  financialYear: string,
+  cashBookType: string,
+) {
+  // Portrait A4: 210mm wide, 10mm margins → 190mm usable width
+  const P_CX = 105;   // portrait centre X
+  const P_TW = 190;   // portrait table width
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.text('Receipt & Payment Heads List', P_CX, 13, { align: 'center' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text(
+    `SMP Cash Book  ·  ${cashBookType}  ·  FY: ${financialYear}  ·  Generated: ${new Date().toLocaleDateString('en-IN')}`,
+    P_CX, 19, { align: 'center' },
+  );
+  doc.setTextColor(0, 0, 0);
+
+  const maxLen = Math.max(receiptLedgers.length, paymentLedgers.length, 1);
+  const grandTotalR = receiptLedgers.reduce((s, l) => s + l.total, 0);
+  const grandTotalP = paymentLedgers.reduce((s, l) => s + l.total, 0);
+
+  const C_RECEIPT_HDR: RGB = [21,  128, 61 ];  // green-700
+  const C_PAYMENT_HDR: RGB = [185, 28,  28 ];  // red-700
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const body: any[] = [];
+  for (let i = 0; i < maxLen; i++) {
+    const r = receiptLedgers[i];
+    const p = paymentLedgers[i];
+    body.push([
+      r ? r.head              : '',
+      r ? String(r.count)     : '',
+      r ? fmtAmt(r.total)     : '',
+      p ? p.head              : '',
+      p ? String(p.count)     : '',
+      p ? fmtAmt(p.total)     : '',
+    ]);
+  }
+  // Totals row
+  body.push([
+    `Total (${receiptLedgers.length} head${receiptLedgers.length !== 1 ? 's' : ''})`,
+    String(receiptLedgers.reduce((s, l) => s + l.count, 0)),
+    fmtAmt(grandTotalR),
+    `Total (${paymentLedgers.length} head${paymentLedgers.length !== 1 ? 's' : ''})`,
+    String(paymentLedgers.reduce((s, l) => s + l.count, 0)),
+    fmtAmt(grandTotalP),
+  ]);
+  const TOTAL_IDX = body.length - 1;
+
+  // Column widths: 62 + 13 + 20 + 62 + 13 + 20 = 190mm
+  autoTable(doc, {
+    startY: 23,
+    margin:     { left: MARGIN, right: MARGIN },
+    tableWidth: P_TW,
+    head: [
+      [
+        { content: 'Receipt Heads', colSpan: 3,
+          styles: { fillColor: C_RECEIPT_HDR, textColor: C_WHITE, halign: 'center' as const, fontStyle: 'bold' as const, fontSize: 9 } },
+        { content: 'Payment Heads', colSpan: 3,
+          styles: { fillColor: C_PAYMENT_HDR, textColor: C_WHITE, halign: 'center' as const, fontStyle: 'bold' as const, fontSize: 9 } },
+      ],
+      ['Head of Account', 'Entries', 'Total', 'Head of Account', 'Entries', 'Total'],
+    ],
+    body,
+    styles:     BASE,
+    headStyles: { ...HEAD_S, minCellHeight: 8 },
+    columnStyles: {
+      0: { cellWidth: 62 },
+      1: { cellWidth: 13, halign: 'center' as const },
+      2: { cellWidth: 20, halign: 'right'  as const },
+      3: { cellWidth: 62 },
+      4: { cellWidth: 13, halign: 'center' as const },
+      5: { cellWidth: 20, halign: 'right'  as const },
+    },
+    didParseCell: (data) => {
+      if (data.section !== 'body') return;
+      data.cell.styles.fillColor = C_WHITE;
+      if (data.row.index === TOTAL_IDX) {
+        data.cell.styles.fillColor = C_TOTAL;
+        data.cell.styles.fontStyle = 'bold';
+      }
+    },
+  });
+
+  // Net balance note below table (portrait page height ≈ 297mm)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const finalY: number = (doc as any).lastAutoTable?.finalY ?? 260;
+  if (finalY + 14 < 287) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    const net = grandTotalR - grandTotalP;
+    doc.text(
+      `Net Balance (Receipts \u2212 Payments): ${fmtAmt(net)}`,
+      MARGIN, finalY + 8,
+    );
+  }
+
+  doc.save(`heads-list-${financialYear.replace('/', '-')}.pdf`);
+}
+
+export function exportLedgerListExcel(
+  receiptLedgers: Array<{ head: string; total: number; count: number }>,
+  paymentLedgers: Array<{ head: string; total: number; count: number }>,
+  financialYear: string,
+  cashBookType: string,
+) {
+  const maxLen = Math.max(receiptLedgers.length, paymentLedgers.length, 1);
+  const grandTotalR = receiptLedgers.reduce((s, l) => s + l.total, 0);
+  const grandTotalP = paymentLedgers.reduce((s, l) => s + l.total, 0);
+
+  const rows: (string | number)[][] = [
+    ['Receipt & Payment Heads List'],
+    [`SMP Cash Book \u2014 ${cashBookType}  |  FY: ${financialYear}  |  Generated: ${new Date().toLocaleDateString('en-IN')}`],
+    [],
+    ['Receipt Heads', '', '', 'Payment Heads', '', ''],
+    ['Head of Account', 'Entries', 'Total', 'Head of Account', 'Entries', 'Total'],
+  ];
+
+  for (let i = 0; i < maxLen; i++) {
+    const r = receiptLedgers[i];
+    const p = paymentLedgers[i];
+    rows.push([
+      r ? r.head  : '',
+      r ? r.count : '',
+      r ? r.total : '',
+      p ? p.head  : '',
+      p ? p.count : '',
+      p ? p.total : '',
+    ]);
+  }
+
+  rows.push([]);
+  rows.push([
+    `Total (${receiptLedgers.length} head${receiptLedgers.length !== 1 ? 's' : ''})`,
+    receiptLedgers.reduce((s, l) => s + l.count, 0),
+    grandTotalR,
+    `Total (${paymentLedgers.length} head${paymentLedgers.length !== 1 ? 's' : ''})`,
+    paymentLedgers.reduce((s, l) => s + l.count, 0),
+    grandTotalP,
+  ]);
+  rows.push([]);
+  rows.push([`Net Balance (Receipts \u2212 Payments):`, '', grandTotalR - grandTotalP, '', '', '']);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [
+    { wch: 40 }, { wch: 10 }, { wch: 14 },
+    { wch: 40 }, { wch: 10 }, { wch: 14 },
+  ];
+  // Merge "Receipt Heads" / "Payment Heads" label cells (row index 3)
+  ws['!merges'] = [
+    { s: { r: 3, c: 0 }, e: { r: 3, c: 2 } },
+    { s: { r: 3, c: 3 }, e: { r: 3, c: 5 } },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Heads List');
+  XLSX.writeFile(wb, `heads-list-${financialYear.replace('/', '-')}.xlsx`);
+}
+
 export function exportBankStatementExcel(p: BankStatementExportParams) {
   const cbStr = `${fmtAmt(Math.abs(p.closingBalance))}${p.closingBalance < 0 ? ' Dr' : ''}`;
 
