@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/utils/cn';
 import { Input } from '@/components/ui/Input';
 import { DateInput } from '@/components/ui/DateInput';
@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/Textarea';
 import { Button } from '@/components/ui/Button';
 import { useSettings } from '@/context/SettingsContext';
 import { useToast } from '@/context/ToastContext';
-import { apiCreateEntry } from '@/api/entries';
+import { apiCreateEntry, apiGetEntries } from '@/api/entries';
 import { toProperCase } from '@smp-cashbook/shared';
 import { formatDate } from '@/utils/formatDate';
 import { formatCurrency } from '@/utils/formatCurrency';
@@ -153,6 +153,29 @@ export function NewEntryPage() {
     settings.activeCashBookType
   );
 
+  // ── Previous-year entries for suggestion fallback ──────────────────────────
+
+  const [prevEntries, setPrevEntries] = useState<Entry[]>([]);
+
+  const previousFYs = useMemo(
+    () => settings.financialYears.filter((fy) => fy !== settings.activeFinancialYear),
+    [settings.financialYears, settings.activeFinancialYear]
+  );
+
+  useEffect(() => {
+    if (previousFYs.length === 0) { setPrevEntries([]); return; }
+    const types = settings.activeCashBookType === 'Both'
+      ? ['Aided', 'Un-Aided']
+      : [settings.activeCashBookType];
+    let cancelled = false;
+    Promise.all(
+      previousFYs.flatMap((fy) => types.map((type) => apiGetEntries(fy, type)))
+    ).then((results) => {
+      if (!cancelled) setPrevEntries(results.flat());
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [previousFYs, settings.activeCashBookType]);
+
   // ── Date-grouped recent entries (all entries, sorted by date asc) ──────────
 
   const allSorted = useMemo(
@@ -212,6 +235,13 @@ export function NewEntryPage() {
     [entries, form.type]
   );
 
+  const prevTypeEntries = useMemo(
+    () => [...prevEntries]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .filter((e) => e.type === form.type),
+    [prevEntries, form.type]
+  );
+
   const hoaSuggestions = useMemo(() => {
     const q = form.headOfAccount.trim().toLowerCase();
     if (!q) return [];
@@ -224,25 +254,37 @@ export function NewEntryPage() {
         if (result.length === 2) break;
       }
     }
+    if (result.length < 2) {
+      for (const e of prevTypeEntries) {
+        if (!seen.has(e.headOfAccount) && e.headOfAccount.toLowerCase().includes(q)) {
+          seen.add(e.headOfAccount);
+          result.push(e.headOfAccount);
+          if (result.length === 2) break;
+        }
+      }
+    }
     return result;
-  }, [typeEntries, form.headOfAccount]);
+  }, [typeEntries, prevTypeEntries, form.headOfAccount]);
 
   const getMostRecentNote = useCallback(
     (head: string) => {
       const match = typeEntries
         .filter((e) => e.headOfAccount === head && e.notes)
         .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))[0];
-      return match?.notes ?? '';
+      if (match) return match.notes;
+      const prevMatch = prevTypeEntries
+        .filter((e) => e.headOfAccount === head && e.notes)
+        .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))[0];
+      return prevMatch?.notes ?? '';
     },
-    [typeEntries]
+    [typeEntries, prevTypeEntries]
   );
 
   const notesSuggestions = useMemo(() => {
     const q = form.notes.trim().toLowerCase();
     if (!q) return [];
-    const pool = form.headOfAccount.trim()
-      ? typeEntries.filter((e) => e.headOfAccount === form.headOfAccount.trim())
-      : typeEntries;
+    const hoa = form.headOfAccount.trim();
+    const pool = hoa ? typeEntries.filter((e) => e.headOfAccount === hoa) : typeEntries;
     const seen = new Set<string>();
     const result: string[] = [];
     for (const e of pool) {
@@ -252,8 +294,18 @@ export function NewEntryPage() {
         if (result.length === 2) break;
       }
     }
+    if (result.length < 2) {
+      const prevPool = hoa ? prevTypeEntries.filter((e) => e.headOfAccount === hoa) : prevTypeEntries;
+      for (const e of prevPool) {
+        if (e.notes && !seen.has(e.notes) && e.notes.toLowerCase().includes(q)) {
+          seen.add(e.notes);
+          result.push(e.notes);
+          if (result.length === 2) break;
+        }
+      }
+    }
     return result;
-  }, [typeEntries, form.notes, form.headOfAccount]);
+  }, [typeEntries, prevTypeEntries, form.notes, form.headOfAccount]);
 
   // ── Cheque No suggestion ──────────────────────────────────────────────────
 

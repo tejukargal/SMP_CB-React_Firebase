@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useToast } from '@/context/ToastContext';
 import { apiDeleteEntry, apiUpdateEntry } from '@/api/entries';
 import { formatCurrency } from '@/utils/formatCurrency';
@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/Textarea';
 import { DateInput } from '@/components/ui/DateInput';
 import { cn } from '@/utils/cn';
 import type { Entry, EntryType } from '@smp-cashbook/shared';
+import { useEntries } from '@/hooks/useEntries';
 
 interface EditForm {
   date: string;
@@ -24,6 +25,25 @@ interface EditErrors {
   date?: string;
   amount?: string;
   headOfAccount?: string;
+}
+
+function SuggestDropdown({ suggestions, onSelect }: { suggestions: string[]; onSelect: (v: string) => void }) {
+  if (suggestions.length === 0) return null;
+  return (
+    <ul className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-slate-200 bg-white shadow-lg overflow-hidden">
+      {suggestions.map((s) => (
+        <li key={s}>
+          <button
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); onSelect(s); }}
+            className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 truncate transition-colors"
+          >
+            {s}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function ViewField({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
@@ -56,6 +76,74 @@ export function EntryDetailModal({ entry, onClose }: { entry: Entry; onClose: ()
   // Delete state
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Autocomplete state
+  const [hoaOpen, setHoaOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+
+  // Entries for autocomplete suggestions (same FY + cashBookType as the entry)
+  const { entries } = useEntries(entry.financialYear, entry.cashBookType);
+
+  const typeEntries = useMemo(
+    () => [...entries]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .filter((e) => e.type === form.type),
+    [entries, form.type]
+  );
+
+  const hoaSuggestions = useMemo(() => {
+    const q = form.headOfAccount.trim().toLowerCase();
+    if (!q) return [];
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const e of typeEntries) {
+      if (!seen.has(e.headOfAccount) && e.headOfAccount.toLowerCase().includes(q)) {
+        seen.add(e.headOfAccount);
+        result.push(e.headOfAccount);
+        if (result.length === 2) break;
+      }
+    }
+    return result;
+  }, [typeEntries, form.headOfAccount]);
+
+  const getMostRecentNote = useCallback(
+    (head: string) => {
+      const match = typeEntries
+        .filter((e) => e.headOfAccount === head && e.notes)
+        .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))[0];
+      return match?.notes ?? '';
+    },
+    [typeEntries]
+  );
+
+  const notesSuggestions = useMemo(() => {
+    const q = form.notes.trim().toLowerCase();
+    if (!q) return [];
+    const pool = form.headOfAccount.trim()
+      ? typeEntries.filter((e) => e.headOfAccount === form.headOfAccount.trim())
+      : typeEntries;
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const e of pool) {
+      if (e.notes && !seen.has(e.notes) && e.notes.toLowerCase().includes(q)) {
+        seen.add(e.notes);
+        result.push(e.notes);
+        if (result.length === 2) break;
+      }
+    }
+    return result;
+  }, [typeEntries, form.notes, form.headOfAccount]);
+
+  const selectHoa = (head: string) => {
+    setField('headOfAccount', head);
+    setField('notes', getMostRecentNote(head));
+    setHoaOpen(false);
+  };
+
+  const selectNote = (note: string) => {
+    setField('notes', note);
+    setNotesOpen(false);
+  };
 
   // Live-preview type for header colour while editing
   const displayType = editing ? form.type : entry.type;
@@ -261,22 +349,45 @@ export function EntryDetailModal({ entry, onClose }: { entry: Entry; onClose: ()
                   error={editErrors.amount}
                 />
 
-                <Input
-                  label="Head of Account"
-                  id="edit-hoa"
-                  type="text"
-                  value={form.headOfAccount}
-                  onChange={(e) => setField('headOfAccount', toProperCase(e.target.value))}
-                  error={editErrors.headOfAccount}
-                />
+                <div className="relative">
+                  <Input
+                    label="Head of Account"
+                    id="edit-hoa"
+                    type="text"
+                    value={form.headOfAccount}
+                    onChange={(e) => { setField('headOfAccount', toProperCase(e.target.value)); setHoaOpen(true); }}
+                    onFocus={() => setHoaOpen(true)}
+                    onBlur={() => setHoaOpen(false)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') { setHoaOpen(false); return; }
+                      if (e.key === 'Tab' && hoaOpen && hoaSuggestions.length > 0) {
+                        e.preventDefault(); selectHoa(hoaSuggestions[0]);
+                      }
+                    }}
+                    error={editErrors.headOfAccount}
+                    autoComplete="off"
+                  />
+                  {hoaOpen && <SuggestDropdown suggestions={hoaSuggestions} onSelect={selectHoa} />}
+                </div>
 
-                <Textarea
-                  label="Notes"
-                  id="edit-notes"
-                  placeholder="Optional remarks..."
-                  value={form.notes}
-                  onChange={(e) => setField('notes', toProperCase(e.target.value))}
-                />
+                <div className="relative">
+                  <Textarea
+                    label="Notes"
+                    id="edit-notes"
+                    placeholder="Optional remarks..."
+                    value={form.notes}
+                    onChange={(e) => { setField('notes', toProperCase(e.target.value)); setNotesOpen(true); }}
+                    onFocus={() => setNotesOpen(true)}
+                    onBlur={() => setNotesOpen(false)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') { setNotesOpen(false); return; }
+                      if (e.key === 'Tab' && notesOpen && notesSuggestions.length > 0) {
+                        e.preventDefault(); selectNote(notesSuggestions[0]);
+                      }
+                    }}
+                  />
+                  {notesOpen && <SuggestDropdown suggestions={notesSuggestions} onSelect={selectNote} />}
+                </div>
               </div>
             </div>
           ) : (
