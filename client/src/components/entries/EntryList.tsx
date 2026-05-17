@@ -8,6 +8,7 @@ import { useSettings } from '@/context/SettingsContext';
 import { useToast } from '@/context/ToastContext';
 import { apiDeleteEntry } from '@/api/entries';
 import { exportListPDF, exportDatePDF, exportListExcel, exportDateExcel } from '@/utils/exportEntries';
+import { FEE_HEADS } from '@/utils/exportFeeRegister';
 import type { Entry } from '@smp-cashbook/shared';
 
 interface EntryListProps {
@@ -342,22 +343,13 @@ function DateGroupPanel({
   );
 }
 
-// ── Head-of-account sort order within a date group ───────────────────────────
+// ── Within-date sort helpers ──────────────────────────────────────────────────
 
-const RECEIPT_HEAD_ORDER: string[] = [
-  'Adm Fee', 'Tution Fee', 'Rr Fee', 'Ass Fee', 'Sports Fee',
-  'Mag Fee', 'Id Fee', 'Lib Fee', 'Lab Fee', 'Dvp Fee',
-  'Swf Fee', 'Twf Fee', 'Nss Fee', 'Fine',
-  'Govt Salary Grants', 'I Tax', 'P Tax', 'Lic', 'Gslic', 'Fbf',
-];
-
-const PAYMENT_HEAD_ORDER: string[] = [
-  'Govt Salary Acct', 'I Tax', 'P Tax', 'Lic', 'Gslic', 'Fbf',
-];
-
-function headRank(order: string[], head: string): number {
-  const idx = order.findIndex(h => h.toLowerCase() === head.toLowerCase());
-  return idx === -1 ? order.length : idx;
+function feeHeadRank(head: string): number {
+  const idx = (FEE_HEADS as readonly string[]).findIndex(
+    h => h.toLowerCase() === head.toLowerCase(),
+  );
+  return idx === -1 ? FEE_HEADS.length : idx;
 }
 
 const DateGroupedView = memo(function DateGroupedView({
@@ -413,10 +405,19 @@ const DateGroupedView = memo(function DateGroupedView({
       {groupsWithBalance.map(({ date, dateEntries, openingBalance, closingBalance }) => {
         const receipts = dateEntries
           .filter((e) => e.type === 'Receipt')
-          .sort((a, b) => headRank(RECEIPT_HEAD_ORDER, a.headOfAccount) - headRank(RECEIPT_HEAD_ORDER, b.headOfAccount));
+          .sort((a, b) => {
+            const ar = feeHeadRank(a.headOfAccount);
+            const br = feeHeadRank(b.headOfAccount);
+            const aFee = ar < FEE_HEADS.length;
+            const bFee = br < FEE_HEADS.length;
+            if (aFee && bFee) return ar - br;
+            if (aFee) return -1;
+            if (bFee) return 1;
+            return a.createdAt.localeCompare(b.createdAt);
+          });
         const payments = dateEntries
           .filter((e) => e.type === 'Payment')
-          .sort((a, b) => headRank(PAYMENT_HEAD_ORDER, a.headOfAccount) - headRank(PAYMENT_HEAD_ORDER, b.headOfAccount));
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
         const dayR = receipts.reduce((s, e) => s + e.amount, 0);
         const dayP = payments.reduce((s, e) => s + e.amount, 0);
         const receiptGrandTotal = openingBalance + dayR;

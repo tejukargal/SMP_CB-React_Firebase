@@ -47,7 +47,12 @@ export function useEntries(financialYear: string, cashBookType: ActiveCashBookTy
       const unsub = onSnapshot(
         q,
         (snap) => {
-          setEntries(snap.docs.map((d) => mapDoc(d, cashBookType as CashBookType, financialYear)));
+          const mapped = snap.docs.map((d) => mapDoc(d, cashBookType as CashBookType, financialYear));
+          mapped.sort((a, b) => {
+            if (a.date !== b.date) return a.date.localeCompare(b.date);
+            return a.createdAt.localeCompare(b.createdAt);
+          });
+          setEntries(mapped);
           setLoading(false);
           setRefreshing(false);
           hasData.current = true;
