@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useToast } from '@/context/ToastContext';
 import { apiDeleteEntry, apiUpdateEntry } from '@/api/entries';
 import { formatCurrency } from '@/utils/formatCurrency';
@@ -106,16 +106,6 @@ export function EntryDetailModal({ entry, onClose }: { entry: Entry; onClose: ()
     return result;
   }, [typeEntries, form.headOfAccount]);
 
-  const getMostRecentNote = useCallback(
-    (head: string) => {
-      const match = typeEntries
-        .filter((e) => e.headOfAccount === head && e.notes)
-        .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))[0];
-      return match?.notes ?? '';
-    },
-    [typeEntries]
-  );
-
   const notesSuggestions = useMemo(() => {
     const q = form.notes.trim().toLowerCase();
     if (!q) return [];
@@ -136,7 +126,6 @@ export function EntryDetailModal({ entry, onClose }: { entry: Entry; onClose: ()
 
   const selectHoa = (head: string) => {
     setField('headOfAccount', head);
-    setField('notes', getMostRecentNote(head));
     setHoaOpen(false);
   };
 

@@ -305,16 +305,13 @@ function DateGroupPanel({
   const color = isReceipt ? 'green' : 'red';
 
   return (
-    <div className="flex flex-col min-w-0">
-      <div className={`flex items-center rounded-t-lg border-x border-t px-3 py-1.5
-        ${isReceipt ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}
-      >
+    <>
+      <div className={`px-3 py-1.5 ${isReceipt ? 'bg-green-50' : 'bg-red-50'}`}>
         <span className={`text-xs font-semibold uppercase tracking-wide text-${color}-700`}>
           {type}s
         </span>
       </div>
-
-      <div className={`flex-1 border-x ${isReceipt ? 'border-green-200' : 'border-red-200'}`}>
+      <div className="flex-1">
         {entries.length > 0 ? (
           <table className="w-full text-left text-sm table-fixed">
             <CompactTableHead selectMode={selectMode} />
@@ -339,7 +336,7 @@ function DateGroupPanel({
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }
 
@@ -426,61 +423,74 @@ const DateGroupedView = memo(function DateGroupedView({
         return (
           <div key={date} className="grid grid-cols-2 gap-x-4">
 
-            <div className={`mb-2 flex items-center justify-between rounded-lg border px-3 py-1.5
-              ${openingBalance > 0
-                ? 'border-blue-100 bg-blue-50/60'
-                : 'border-slate-200 bg-slate-50'}`}
-            >
-              <span className={`text-xs font-semibold ${openingBalance > 0 ? 'text-slate-700' : 'text-slate-600'}`}>
-                {formatDate(date)}
-              </span>
-              {openingBalance !== 0 && (
-                <span className="text-xs font-bold text-blue-600">
-                  By Opening Bal &nbsp;
-                  {formatCurrency(Math.abs(openingBalance))}{openingBalance < 0 ? ' (Dr)' : ''}
+              {/* Date header — left column only, aligned with receipt card */}
+              <div className={`mb-2 flex items-center justify-between rounded-lg border-2 px-3 py-1.5
+                ${openingBalance > 0
+                  ? 'border-blue-200 bg-blue-50/60'
+                  : 'border-slate-300 bg-slate-50'}`}
+              >
+                <span className={`text-sm font-semibold ${openingBalance > 0 ? 'text-slate-700' : 'text-slate-600'}`}>
+                  {formatDate(date)}
                 </span>
-              )}
-            </div>
-            <div className="mb-2" />
-
-            <DateGroupPanel entries={receipts} type="Receipt" selectProps={selectProps} />
-            <DateGroupPanel entries={payments} type="Payment" allEntries={allEntries} selectProps={selectProps} />
-
-            <div className="rounded-b-lg border-x border-b border-green-200 overflow-hidden">
-              <div className="border-t-2 border-green-300 bg-slate-50 flex items-center justify-between px-3 py-1.5">
-                <span className="text-xs font-medium text-slate-500">
-                  Total ({receipts.length} {receipts.length === 1 ? 'entry' : 'entries'})
-                </span>
-                <span className="text-xs font-bold text-green-700">
-                  {formatCurrency(receiptGrandTotal)}
-                </span>
+                {openingBalance !== 0 && (
+                  <span className="text-xs font-bold text-blue-600">
+                    By Opening Bal &nbsp;
+                    {formatCurrency(Math.abs(openingBalance))}{openingBalance < 0 ? ' (Dr)' : ''}
+                  </span>
+                )}
               </div>
-            </div>
+              <div className="mb-2" />
 
-            <div className="rounded-b-lg border-x border-b border-red-200 overflow-hidden">
-              <div className="border-t-2 border-red-300 bg-slate-50">
-                <div className="flex items-center justify-between px-3 py-1.5">
-                  <span className="text-xs font-medium text-slate-500">
-                    Total ({payments.length} {payments.length === 1 ? 'entry' : 'entries'})
-                  </span>
-                  <span className="text-xs font-bold text-red-700">
-                    {formatCurrency(dayP)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between px-3 py-1.5">
-                  <span className="text-xs font-semibold text-slate-600">Closing Balance</span>
-                  <span className="text-xs font-bold text-orange-600">
-                    {formatCurrency(Math.abs(closingBalance))}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between px-3 py-1.5 border-t border-slate-200">
-                  <span />
-                  <span className="text-xs font-bold text-red-700">
-                    {formatCurrency(paymentGrandTotal)}
-                  </span>
+              {/* Receipt card */}
+              <div className="flex flex-col rounded-lg border-2 border-green-300 overflow-hidden">
+                <DateGroupPanel entries={receipts} type="Receipt" selectProps={selectProps} />
+                <div className="border-t-2 border-green-400 bg-slate-50">
+                  <div className="flex items-center justify-between px-3 py-1.5">
+                    <span className="text-xs font-medium text-slate-500">
+                      Total ({receipts.length} {receipts.length === 1 ? 'entry' : 'entries'})
+                    </span>
+                    <span className="text-xs font-bold text-green-700">
+                      {formatCurrency(dayR)}
+                    </span>
+                  </div>
+                  <div className="flex items-center px-3 py-1.5">
+                    <span className="text-xs">&nbsp;</span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-1.5 border-t border-slate-200">
+                    <span />
+                    <span className="text-xs font-bold text-green-700">
+                      {formatCurrency(receiptGrandTotal)}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
+
+              {/* Payment card */}
+              <div className="flex flex-col rounded-lg border-2 border-red-300 overflow-hidden">
+                <DateGroupPanel entries={payments} type="Payment" allEntries={allEntries} selectProps={selectProps} />
+                <div className="border-t-2 border-red-400 bg-slate-50">
+                  <div className="flex items-center justify-between px-3 py-1.5">
+                    <span className="text-xs font-medium text-slate-500">
+                      Total ({payments.length} {payments.length === 1 ? 'entry' : 'entries'})
+                    </span>
+                    <span className="text-xs font-bold text-red-700">
+                      {formatCurrency(dayP)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-1.5">
+                    <span className="text-xs font-semibold text-slate-600">Closing Balance</span>
+                    <span className="text-xs font-bold text-orange-600">
+                      {formatCurrency(Math.abs(closingBalance))}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-1.5 border-t border-slate-200">
+                    <span />
+                    <span className="text-xs font-bold text-red-700">
+                      {formatCurrency(paymentGrandTotal)}
+                    </span>
+                  </div>
+                </div>
+              </div>
 
           </div>
         );

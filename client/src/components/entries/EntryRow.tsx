@@ -58,7 +58,7 @@ export const EntryRow = memo(function EntryRow({
         onClick={selectMode ? () => onToggle?.(entry.id) : undefined}
         onDoubleClick={!selectMode ? () => setDetailOpen(true) : undefined}
         onContextMenu={handleContextMenu}
-        className={`border-b border-slate-100 transition-colors cursor-pointer
+        className={`border-b border-slate-100 transition-colors cursor-pointer align-top
           ${selectMode
             ? selected
               ? 'bg-blue-50 hover:bg-blue-100'
@@ -81,7 +81,7 @@ export const EntryRow = memo(function EntryRow({
         )}
 
         {/* Date — fixed 90px, no wrap */}
-        <td className="w-[90px] min-w-[90px] py-2.5 pl-4 pr-2 text-xs text-slate-600 whitespace-nowrap">
+        <td className={`w-[90px] min-w-[90px] py-2.5 pl-4 pr-2 whitespace-nowrap text-slate-600 ${compact ? 'text-sm' : 'text-xs'}`}>
           {formatDate(entry.date)}
         </td>
 
@@ -93,22 +93,13 @@ export const EntryRow = memo(function EntryRow({
             }`}>
               {entry.type}
             </span>
-            {showCashBookBadge && (
-              <span className={`mt-0.5 flex rounded px-1.5 py-0.5 text-[10px] font-semibold w-fit ${
-                entry.cashBookType === 'Aided'
-                  ? 'bg-teal-50 text-teal-600'
-                  : 'bg-orange-50 text-orange-600'
-              }`}>
-                {entry.cashBookType === 'Aided' ? 'Aided' : 'Un-Aided'}
-              </span>
-            )}
           </td>
         )}
 
         {/* Head of Account — fills remaining space, truncated, no wrap */}
         <td className="px-2 py-2.5 text-sm text-slate-800 whitespace-nowrap overflow-hidden max-w-0">
           <span className="block truncate">{entry.headOfAccount}</span>
-          {compact && showCashBookBadge && (
+          {showCashBookBadge && (
             <span className={`mt-0.5 inline-flex rounded px-1.5 py-0 text-[10px] font-semibold leading-4 ${
               entry.cashBookType === 'Aided'
                 ? 'bg-teal-50 text-teal-600'

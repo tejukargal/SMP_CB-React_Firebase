@@ -6,6 +6,7 @@ import { cn } from '@/utils/cn';
 
 export function DashboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
@@ -24,7 +25,7 @@ export function DashboardPage() {
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
-        <Sidebar />
+        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
       </div>
 
       {/* Main */}
