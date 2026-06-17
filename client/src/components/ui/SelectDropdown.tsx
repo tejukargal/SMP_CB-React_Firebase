@@ -7,6 +7,7 @@ interface SelectDropdownProps {
   options: { label: string; value: string }[];
   placeholder?: string;
   className?: string;
+  triggerCls?: string;
 }
 
 export function SelectDropdown({
@@ -15,6 +16,7 @@ export function SelectDropdown({
   options,
   placeholder = 'All',
   className,
+  triggerCls,
 }: SelectDropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -37,7 +39,7 @@ export function SelectDropdown({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700 focus:outline-none"
+        className={triggerCls ?? 'flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700 focus:outline-none'}
       >
         <span className="max-w-[140px] truncate">{selectedLabel}</span>
         <svg

@@ -90,15 +90,25 @@ const navItems = [
   },
 ];
 
-interface SidebarProps {
-  collapsed: boolean;
-  onToggle: () => void;
-}
+const FEATURES = [
+  'Receipts & Payments',
+  'By-Date View',
+  'Ledger Accounts',
+  'Fee Register',
+  'Salary Register',
+  'Bank Accounts',
+  'PDF Export',
+  'Excel Export',
+  'Voucher Printing',
+];
 
-export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export function Sidebar() {
   const { logout } = useAuth();
+  const [collapsed, setCollapsed] = useState(false);
   const [logoHovered, setLogoHovered] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  const [showAbout, setShowAbout] = useState(false);
+  const [showTech, setShowTech] = useState(false);
 
   const showTooltip = useCallback((label: string, e: React.MouseEvent) => {
     if (!collapsed) return;
@@ -107,6 +117,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   }, [collapsed]);
 
   const hideTooltip = useCallback(() => setTooltip(null), []);
+
+  const closeAbout = () => { setShowAbout(false); setShowTech(false); };
 
   const textStyle = (extraDelay = 0): React.CSSProperties => ({
     overflow: 'hidden',
@@ -118,7 +130,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       : `max-width 220ms cubic-bezier(0.4,0,0.2,1) ${extraDelay}ms, opacity 180ms ease ${extraDelay + 60}ms`,
   });
 
-  // Fixed paddingLeft so the icon never shifts; only paddingRight collapses
   const navItemStyle: React.CSSProperties = {
     paddingLeft: 12,
     paddingRight: collapsed ? 0 : 12,
@@ -127,121 +138,132 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   return (
     <>
-    <aside
-      className="flex h-full shrink-0 flex-col border-r border-slate-200 bg-white overflow-hidden"
-      style={{
-        width: collapsed ? 64 : 208,
-        transition: 'width 220ms cubic-bezier(0.4, 0, 0.2, 1)',
-      }}
-    >
-      {/* Brand / Toggle */}
-      <button
-        onClick={onToggle}
-        onMouseEnter={() => setLogoHovered(true)}
-        onMouseLeave={() => setLogoHovered(false)}
-        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        className="group flex items-center gap-2.5 w-full cursor-pointer hover:bg-slate-50 transition-colors px-3 shrink-0 h-14 border-b border-slate-200"
+      <aside
+        className="flex h-full shrink-0 flex-col border-r border-slate-200 bg-white overflow-hidden"
+        style={{
+          width: collapsed ? 64 : 208,
+          transition: 'width 220ms cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
       >
-        {/* Flip-card logo — front: SMP text, back: expand chevron */}
-        <div className="relative w-8 h-8 shrink-0" style={{ perspective: '280px' }}>
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              transformStyle: 'preserve-3d',
-              transition: 'transform 380ms cubic-bezier(0.4, 0, 0.2, 1)',
-              transform: collapsed && logoHovered ? 'rotateY(180deg)' : 'rotateY(0deg)',
-            }}
-          >
-            {/* Front face: SMP text */}
+        {/* Brand / Toggle */}
+        <button
+          onClick={() => setCollapsed(c => !c)}
+          onMouseEnter={() => setLogoHovered(true)}
+          onMouseLeave={() => setLogoHovered(false)}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className="group flex items-center gap-2.5 w-full cursor-pointer hover:bg-slate-50 transition-colors px-3 shrink-0 h-14 border-b border-slate-200"
+        >
+          <div className="relative w-8 h-8 shrink-0" style={{ perspective: '280px' }}>
             <div
-              className="absolute inset-0 rounded-lg flex items-center justify-center shadow-sm"
               style={{
-                background: 'linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)',
-                backfaceVisibility: 'hidden',
-                WebkitBackfaceVisibility: 'hidden',
+                position: 'absolute',
+                inset: 0,
+                transformStyle: 'preserve-3d',
+                transition: 'transform 380ms cubic-bezier(0.4, 0, 0.2, 1)',
+                transform: collapsed && logoHovered ? 'rotateY(180deg)' : 'rotateY(0deg)',
               }}
             >
-              <span className="text-white font-bold text-xs">SMP</span>
-            </div>
-            {/* Back face: expand arrow */}
-            <div
-              className="absolute inset-0 rounded-lg flex items-center justify-center shadow-sm"
-              style={{
-                background: 'linear-gradient(135deg, #1D4ED8 0%, #1E3A8A 100%)',
-                backfaceVisibility: 'hidden',
-                WebkitBackfaceVisibility: 'hidden',
-                transform: 'rotateY(180deg)',
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="9 18 15 12 9 6" />
-              </svg>
+              <div
+                className="absolute inset-0 rounded-lg flex items-center justify-center shadow-sm"
+                style={{
+                  background: 'linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)',
+                  backfaceVisibility: 'hidden',
+                  WebkitBackfaceVisibility: 'hidden',
+                }}
+              >
+                <span className="text-white font-bold text-xs">SMP</span>
+              </div>
+              <div
+                className="absolute inset-0 rounded-lg flex items-center justify-center shadow-sm"
+                style={{
+                  background: 'linear-gradient(135deg, #1D4ED8 0%, #1E3A8A 100%)',
+                  backfaceVisibility: 'hidden',
+                  WebkitBackfaceVisibility: 'hidden',
+                  transform: 'rotateY(180deg)',
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Wordmark */}
-        <div style={{
-          overflow: 'hidden',
-          opacity: collapsed ? 0 : 1,
-          transition: collapsed ? 'opacity 120ms ease' : 'opacity 180ms ease 60ms',
-        }}>
-          <p style={{ whiteSpace: 'nowrap' }} className="text-sm font-semibold text-slate-800">SMP Cash Book</p>
-        </div>
+          <div style={{
+            overflow: 'hidden',
+            opacity: collapsed ? 0 : 1,
+            transition: collapsed ? 'opacity 120ms ease' : 'opacity 180ms ease 60ms',
+          }}>
+            <p style={{ whiteSpace: 'nowrap' }} className="text-sm font-semibold text-slate-800">SMP Cash Book</p>
+          </div>
 
-        {/* Collapse chevron — fades away when collapsed */}
-        <span
-          className="flex items-center justify-center text-slate-400 group-hover:text-slate-600 transition-colors shrink-0 ml-auto"
-          style={textStyle()}
-        >
-          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </span>
-      </button>
-
-      {/* Nav */}
-      <nav className="flex flex-1 flex-col gap-0.5 p-2 overflow-y-auto overflow-x-hidden">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            style={navItemStyle}
-            onMouseEnter={(e) => showTooltip(item.label, e)}
-            onMouseLeave={hideTooltip}
-            className={({ isActive }) =>
-              cn(
-                'group flex items-center gap-2.5 py-2 w-full rounded-md text-sm transition-colors',
-                isActive
-                  ? 'bg-blue-50 text-blue-700 font-medium'
-                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'
-              )
-            }
+          <span
+            className="flex items-center justify-center text-slate-400 group-hover:text-slate-600 transition-colors shrink-0 ml-auto"
+            style={textStyle()}
           >
-            {item.icon}
-            <span style={textStyle()} className="truncate">{item.label}</span>
-          </NavLink>
-        ))}
-      </nav>
-
-      {/* Logout */}
-      <div className="border-t border-slate-200 p-2">
-        <button
-          onClick={logout}
-          style={navItemStyle}
-          onMouseEnter={(e) => showTooltip('Logout', e)}
-          onMouseLeave={hideTooltip}
-          className="group flex w-full items-center gap-2.5 py-2 rounded-md text-sm text-slate-500 hover:bg-slate-50 hover:text-red-600 transition-colors"
-        >
-          <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-          <span style={textStyle()}>Logout</span>
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </span>
         </button>
-      </div>
-    </aside>
+
+        {/* Nav */}
+        <nav className="flex flex-1 flex-col gap-0.5 p-2 overflow-y-auto overflow-x-hidden">
+          {navItems.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              style={navItemStyle}
+              onMouseEnter={(e) => showTooltip(item.label, e)}
+              onMouseLeave={hideTooltip}
+              className={({ isActive }) =>
+                cn(
+                  'group flex items-center gap-2.5 py-2 w-full rounded-md text-sm transition-colors',
+                  isActive
+                    ? 'bg-blue-50 text-blue-700 font-medium'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'
+                )
+              }
+            >
+              {item.icon}
+              <span style={textStyle()} className="truncate">{item.label}</span>
+            </NavLink>
+          ))}
+        </nav>
+
+        {/* Footer */}
+        <div className="border-t border-slate-200 p-2 space-y-0.5">
+          {/* About */}
+          <button
+            onClick={() => setShowAbout(true)}
+            style={navItemStyle}
+            onMouseEnter={(e) => showTooltip('About', e)}
+            onMouseLeave={hideTooltip}
+            className="group flex w-full items-center gap-2.5 py-2 rounded-md text-sm text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-colors"
+          >
+            <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span style={textStyle()} className="truncate">About</span>
+          </button>
+
+          {/* Logout */}
+          <button
+            onClick={logout}
+            style={navItemStyle}
+            onMouseEnter={(e) => showTooltip('Logout', e)}
+            onMouseLeave={hideTooltip}
+            className="group flex w-full items-center gap-2.5 py-2 rounded-md text-sm text-slate-500 hover:bg-slate-50 hover:text-red-600 transition-colors"
+          >
+            <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span style={textStyle()}>Logout</span>
+          </button>
+        </div>
+      </aside>
 
       {/* ── Collapsed tooltip bubble ── */}
       {collapsed && tooltip && createPortal(
@@ -259,8 +281,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           }}
         >
           <div style={{
-            width: 0,
-            height: 0,
+            width: 0, height: 0,
             borderTop: '5px solid transparent',
             borderBottom: '5px solid transparent',
             borderRight: '5px solid #1D4ED8',
@@ -277,6 +298,128 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             whiteSpace: 'nowrap',
           }}>
             {tooltip.label}
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ── About modal ── */}
+      {showAbout && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={closeAbout}
+            aria-hidden="true"
+            style={{ animation: 'backdrop-enter 0.2s ease-out' }}
+          />
+
+          <div
+            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[360px] overflow-hidden flex flex-col"
+            style={{ animation: 'modal-enter 0.25s ease-out', maxHeight: '90vh' }}
+          >
+            {/* Header */}
+            <div className="px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-800 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-white/20 shrink-0">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                  </svg>
+                </span>
+                <h3 className="text-sm font-bold text-white">About</h3>
+              </div>
+              <button
+                onClick={closeAbout}
+                className="flex items-center justify-center w-7 h-7 rounded-full bg-white/20 hover:bg-white/35 text-white text-lg leading-none transition-colors cursor-pointer"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* App identity bar */}
+            <div className="px-5 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-3 shrink-0">
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shrink-0 shadow-sm">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z"/>
+                </svg>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-900 leading-tight">SMP Cash Book</p>
+                <p className="text-[10px] text-slate-500 leading-tight">Sanjay Memorial Polytechnic, Sagar</p>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div
+              className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-3.5"
+              style={{ scrollbarWidth: 'none' }}
+            >
+              {/* Description */}
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                SMP Cash Book is a purpose-built web application used exclusively to record and manage cash book transactions of <span className="font-semibold text-slate-800">Sanjay Memorial Polytechnic, Sagar</span>. It provides a structured, real-time ledger for tracking receipts and payments across multiple financial years and cash book types.
+              </p>
+
+              {/* Feature pills */}
+              <div className="flex flex-wrap gap-1.5">
+                {FEATURES.map((f) => (
+                  <span
+                    key={f}
+                    className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100"
+                  >
+                    {f}
+                  </span>
+                ))}
+              </div>
+
+              <div className="h-px bg-slate-100" />
+
+              {/* Developer */}
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-2">Developer</p>
+                <div
+                  className="flex items-center gap-2.5 cursor-default select-none"
+                  onDoubleClick={() => setShowTech(v => !v)}
+                  title="Double-click to reveal tech details"
+                >
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center shrink-0">
+                    <span className="text-[11px] font-bold text-white">TR</span>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-900">Thejaraj R</p>
+                    <p className="text-[10px] text-slate-500">FDA · Sanjay Memorial Polytechnic, Sagar</p>
+                  </div>
+                </div>
+
+                {showTech && (
+                  <div
+                    className="mt-2.5 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5 space-y-1"
+                    style={{ animation: 'content-enter 0.2s ease-out' }}
+                  >
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Technology</p>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                      Built with <span className="font-semibold text-slate-700">React 19</span>, <span className="font-semibold text-slate-700">TypeScript</span>, and <span className="font-semibold text-slate-700">Tailwind CSS</span>, backed by <span className="font-semibold text-slate-700">Google Firebase</span> (Firestore &amp; Auth). Data is cloud-hosted with real-time sync across sessions.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="h-px bg-slate-100" />
+
+              {/* Exclusive use note */}
+              <p className="text-[10px] text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 leading-relaxed">
+                This application is exclusively used for recording cash book transactions of Sanjay Memorial Polytechnic, Sagar. Unauthorised use is strictly prohibited.
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-slate-100 px-5 py-3 flex justify-end bg-slate-50/60 shrink-0">
+              <button
+                onClick={closeAbout}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>,
         document.body

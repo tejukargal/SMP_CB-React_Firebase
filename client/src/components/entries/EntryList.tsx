@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, useCallback } from 'react';
+import { memo, useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { EntryRow } from './EntryRow';
 import { EntrySkeleton } from './EntrySkeleton';
 import { EntryFilters, type FilterState } from './EntryFilters';
@@ -578,8 +578,18 @@ function BulkDeleteModal({
 export function EntryList({ entries, loading, refreshing, error }: EntryListProps) {
   const [filters, setFilters] = useState<FilterState>(INIT_FILTERS);
   const [viewMode, setViewMode] = useState<ViewMode>('date');
+  const prevSearchRef = useRef('');
   const { settings } = useSettings();
   const { addToast } = useToast();
+
+  // Switch to Split when searching; return to By Date when cleared
+  useEffect(() => {
+    const hadSearch = prevSearchRef.current.trim().length > 0;
+    const hasSearch = filters.search.trim().length > 0;
+    if (!hadSearch && hasSearch) setViewMode('split');
+    if (hadSearch && !hasSearch) setViewMode('date');
+    prevSearchRef.current = filters.search;
+  }, [filters.search]);
 
   // ── Bulk select state ────────────────────────────────────────────────────
   const [selectMode, setSelectMode]     = useState(false);
@@ -663,17 +673,31 @@ export function EntryList({ entries, loading, refreshing, error }: EntryListProp
           e.chequeNo.toLowerCase().includes(q) ||
           e.notes.toLowerCase().includes(q) ||
           e.date.includes(q) ||
-          `${e.date.split('-')[2]}/${e.date.split('-')[1]}/${e.date.split('-')[0]}`.includes(q)
+          `${e.date.split('-')[2]}/${e.date.split('-')[1]}/${e.date.split('-')[0]}`.includes(q) ||
+          String(e.amount).includes(q)
       );
     }
     return result;
   }, [entries, filters]);
 
-  const receipts    = useMemo(() => filtered.filter((e) => e.type === 'Receipt'), [filtered]);
-  const payments    = useMemo(() => filtered.filter((e) => e.type === 'Payment'), [filtered]);
-  const totalR      = useMemo(() => receipts.reduce((s, e) => s + e.amount, 0), [receipts]);
-  const totalP      = useMemo(() => payments.reduce((s, e) => s + e.amount, 0), [payments]);
-  const netBalance  = totalR - totalP;
+  // ── Pagination ────────────────────────────────────────────────────────────
+  const [visibleCount, setVisibleCount] = useState(10);
+
+  useEffect(() => {
+    setVisibleCount(10);
+  }, [filters]);
+
+  const paginatedFiltered = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
+  const hasMore = filtered.length > visibleCount;
+
+  // Full totals for summary bar (always reflects all filtered entries)
+  const totalR     = useMemo(() => filtered.filter(e => e.type === 'Receipt').reduce((s, e) => s + e.amount, 0), [filtered]);
+  const totalP     = useMemo(() => filtered.filter(e => e.type === 'Payment').reduce((s, e) => s + e.amount, 0), [filtered]);
+  const netBalance = totalR - totalP;
+
+  // Paginated splits for the split view panels
+  const receipts = useMemo(() => paginatedFiltered.filter((e) => e.type === 'Receipt'), [paginatedFiltered]);
+  const payments = useMemo(() => paginatedFiltered.filter((e) => e.type === 'Payment'), [paginatedFiltered]);
 
   if (error) {
     return (
@@ -691,7 +715,7 @@ export function EntryList({ entries, loading, refreshing, error }: EntryListProp
     <div className="flex flex-col gap-4">
 
       {/* ── Sticky filter bar ── */}
-      <div className="sticky top-0 z-20 -mx-6 px-6 py-3 bg-slate-50/95 backdrop-blur-sm border-b border-slate-200">
+      <div className="sticky top-0 z-20 -mx-6 px-6 py-3 bg-white/95 backdrop-blur-sm border-b-2 border-slate-200 shadow-sm">
         {refreshing && (
           <div className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden">
             <div className="h-full animate-progress bg-blue-400" />
@@ -725,8 +749,8 @@ export function EntryList({ entries, loading, refreshing, error }: EntryListProp
                   type="button"
                   onClick={onPDF}
                   title="Export as PDF"
-                  className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
-                    px-2.5 py-2 text-xs font-medium text-slate-600
+                  className="h-9 flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
+                    px-2.5 text-xs font-medium text-slate-600
                     hover:border-red-300 hover:text-red-600 transition-colors"
                 >
                   <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -739,8 +763,8 @@ export function EntryList({ entries, loading, refreshing, error }: EntryListProp
                   type="button"
                   onClick={onXLS}
                   title="Export as Excel"
-                  className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
-                    px-2.5 py-2 text-xs font-medium text-slate-600
+                  className="h-9 flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
+                    px-2.5 text-xs font-medium text-slate-600
                     hover:border-green-300 hover:text-green-600 transition-colors"
                 >
                   <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -760,8 +784,8 @@ export function EntryList({ entries, loading, refreshing, error }: EntryListProp
               disabled={selectedCount === 0}
               onClick={() => setConfirmOpen(true)}
               title="Delete selected entries"
-              className="flex shrink-0 items-center gap-1.5 rounded-md border border-red-300 bg-red-50
-                px-2.5 py-2 text-xs font-medium text-red-600
+              className="h-9 flex shrink-0 items-center gap-1.5 rounded-md border border-red-300 bg-red-50
+                px-2.5 text-xs font-medium text-red-600
                 hover:bg-red-100 hover:border-red-400
                 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
@@ -778,7 +802,7 @@ export function EntryList({ entries, loading, refreshing, error }: EntryListProp
             type="button"
             onClick={toggleSelectMode}
             title={selectMode ? 'Exit selection mode' : 'Select entries to bulk delete'}
-            className={`flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-2
+            className={`h-9 flex shrink-0 items-center gap-1.5 rounded-md border px-2.5
               text-xs font-medium transition-colors
               ${selectMode
                 ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
@@ -797,8 +821,8 @@ export function EntryList({ entries, loading, refreshing, error }: EntryListProp
             type="button"
             onClick={cycleView}
             title={`Switch to ${VIEW_META[nextView].title}`}
-            className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
-              px-2.5 py-2 text-xs font-medium text-slate-600
+            className="h-9 flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
+              px-2.5 text-xs font-medium text-slate-600
               hover:border-blue-300 hover:text-blue-600 transition-colors"
           >
             {meta.icon}
@@ -868,7 +892,7 @@ export function EntryList({ entries, loading, refreshing, error }: EntryListProp
       {/* ── Content — switches by viewMode ── */}
       {viewMode === 'list' && (
         <ListView
-          entries={filtered}
+          entries={paginatedFiltered}
           loading={loading}
           allEntries={entries}
           selectProps={selectProps}
@@ -885,11 +909,38 @@ export function EntryList({ entries, loading, refreshing, error }: EntryListProp
       )}
       {viewMode === 'date' && (
         <DateGroupedView
-          entries={filtered}
+          entries={paginatedFiltered}
           loading={loading}
           allEntries={entries}
           selectProps={selectProps}
         />
+      )}
+
+      {/* ── Load more / pagination footer ── */}
+      {!loading && filtered.length > 0 && (
+        <div className="flex flex-col items-center gap-2 py-2">
+          {hasMore ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setVisibleCount((v) => v + 100)}
+                className="rounded-lg border border-slate-200 bg-white px-6 py-2 text-sm font-medium
+                  text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-colors shadow-sm"
+              >
+                Load more ({Math.min(100, filtered.length - visibleCount)} more entries)
+              </button>
+              <p className="text-xs text-slate-400">
+                Showing {paginatedFiltered.length} of {filtered.length} entries
+              </p>
+            </>
+          ) : (
+            filtered.length > 10 && (
+              <p className="text-xs text-slate-400">
+                All {filtered.length} entries loaded
+              </p>
+            )
+          )}
+        </div>
       )}
 
       {/* ── Bulk delete confirmation modal ── */}

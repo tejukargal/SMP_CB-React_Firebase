@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { SelectDropdown } from '@/components/ui/SelectDropdown';
 import type { EntryType } from '@smp-cashbook/shared';
 
@@ -37,25 +37,27 @@ function parseDateInput(val: string): string {
   return `${year}-${month}-${day}`;
 }
 
-const baseCls =
-  'rounded-md border bg-white px-2.5 py-2 text-xs text-slate-700 ' +
-  'focus:outline-none focus:ring-2 focus:ring-blue-500/20 ' +
-  'placeholder:text-slate-400';
-
-const validCls = `${baseCls} border-slate-200 focus:border-blue-500`;
-const invalidCls = `${baseCls} border-red-300 focus:border-red-400 focus:ring-red-400/20`;
+// All filter controls share h-9 so they align with the toolbar buttons
+const dateBase =
+  'h-9 w-28 shrink-0 rounded-lg border bg-white px-3 text-sm text-slate-700 ' +
+  'focus:outline-none focus:ring-2 focus:ring-blue-400/30 placeholder:text-slate-400 transition-colors';
+const dateValidCls   = `${dateBase} border-slate-300 focus:border-blue-400`;
+const dateInvalidCls = `${dateBase} border-red-400 focus:border-red-400 focus:ring-red-400/20 bg-red-50/40`;
 
 export function EntryFilters({ filters, onChange, headOfAccountOptions }: EntryFiltersProps) {
+  const [, startTransition] = useTransition();
+  const [searchInput, setSearchInput] = useState(filters.search);
   const [rawFrom, setRawFrom] = useState('');
   const [rawTo, setRawTo] = useState('');
 
-  // Sync raw inputs when filters are cleared externally
-  useEffect(() => {
-    if (!filters.dateFrom) setRawFrom('');
-  }, [filters.dateFrom]);
-  useEffect(() => {
-    if (!filters.dateTo) setRawTo('');
-  }, [filters.dateTo]);
+  useEffect(() => { if (!filters.dateFrom) setRawFrom(''); }, [filters.dateFrom]);
+  useEffect(() => { if (!filters.dateTo)   setRawTo('');   }, [filters.dateTo]);
+  useEffect(() => { if (!filters.search)   setSearchInput(''); }, [filters.search]);
+
+  const handleSearchChange = (val: string) => {
+    setSearchInput(val);
+    startTransition(() => onChange({ ...filters, search: val }));
+  };
 
   const set = (key: keyof FilterState, value: string) =>
     onChange({ ...filters, [key]: value });
@@ -63,7 +65,7 @@ export function EntryFilters({ filters, onChange, headOfAccountOptions }: EntryF
   const handleDateChange = (
     raw: string,
     setRaw: (v: string) => void,
-    key: 'dateFrom' | 'dateTo'
+    key: 'dateFrom' | 'dateTo',
   ) => {
     setRaw(raw);
     const parsed = parseDateInput(raw);
@@ -73,14 +75,15 @@ export function EntryFilters({ filters, onChange, headOfAccountOptions }: EntryF
   const handleClear = () => {
     setRawFrom('');
     setRawTo('');
+    setSearchInput('');
     onChange(CLEAR);
   };
 
   const fromInvalid = rawFrom.trim() !== '' && parseDateInput(rawFrom) === '';
-  const toInvalid = rawTo.trim() !== '' && parseDateInput(rawTo) === '';
+  const toInvalid   = rawTo.trim()   !== '' && parseDateInput(rawTo)   === '';
 
   const hasActive =
-    filters.search.trim() ||
+    searchInput.trim() ||
     filters.dateFrom ||
     filters.dateTo ||
     rawFrom.trim() ||
@@ -88,26 +91,48 @@ export function EntryFilters({ filters, onChange, headOfAccountOptions }: EntryF
     filters.headOfAccount;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {/* Search — capped width */}
-      <div className="relative w-44 shrink-0">
+    <div className="flex items-center gap-2">
+
+      {/* ── Search pill ─────────────────────────────────────────────────── */}
+      <div className="relative shrink-0 w-52">
         <svg
-          className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400"
-          fill="none" viewBox="0 0 24 24" stroke="currentColor"
+          className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-400"
+          fill="none" stroke="currentColor" strokeWidth="2.2"
+          strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+          <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
         </svg>
         <input
           type="text"
-          placeholder="Search…"
-          value={filters.search}
-          onChange={(e) => set('search', e.target.value)}
-          className={`${validCls} w-full pl-7`}
+          placeholder="Account, cheque no, notes, amount…"
+          value={searchInput}
+          onChange={(e) => handleSearchChange(e.target.value)}
+          className={`h-9 w-full rounded-full border border-emerald-300 bg-white shadow-sm
+            pl-10 text-sm font-medium text-gray-800
+            placeholder:text-gray-400 placeholder:font-normal
+            focus:outline-none focus:ring-2 focus:ring-emerald-400/50 focus:border-emerald-500
+            transition-all duration-150 ${searchInput ? 'pr-9' : 'pr-4'}`}
         />
+        {searchInput && (
+          <button
+            type="button"
+            onClick={() => handleSearchChange('')}
+            aria-label="Clear search"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center
+              justify-center rounded-full bg-amber-400 hover:bg-amber-500 text-white
+              transition-colors shrink-0"
+          >
+            <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+              <path d="M1 1l6 6M7 1L1 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </button>
+        )}
       </div>
 
-      {/* Head of Account dropdown */}
+      {/* ── Divider ─────────────────────────────────────────────────────── */}
+      <div className="h-9 w-px bg-slate-200 shrink-0" />
+
+      {/* ── Head of Account ──────────────────────────────────────────────── */}
       <SelectDropdown
         value={filters.headOfAccount}
         onChange={(v) => set('headOfAccount', v)}
@@ -116,41 +141,49 @@ export function EntryFilters({ filters, onChange, headOfAccountOptions }: EntryF
           { value: '', label: 'All Accounts' },
           ...headOfAccountOptions.map((hoa) => ({ value: hoa, label: hoa })),
         ]}
+        triggerCls="h-9 flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white shadow-sm px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 transition-colors whitespace-nowrap"
       />
 
-      {/* Date from */}
-      <input
-        type="text"
-        inputMode="numeric"
-        placeholder="dd/mm/yyyy"
-        value={rawFrom}
-        onChange={(e) => handleDateChange(e.target.value, setRawFrom, 'dateFrom')}
-        title="From date (dd/mm/yy or dd/mm/yyyy)"
-        className={`${fromInvalid ? invalidCls : validCls} w-28 shrink-0`}
-      />
-      <span className="text-xs text-slate-400 shrink-0">–</span>
-      {/* Date to */}
-      <input
-        type="text"
-        inputMode="numeric"
-        placeholder="dd/mm/yyyy"
-        value={rawTo}
-        onChange={(e) => handleDateChange(e.target.value, setRawTo, 'dateTo')}
-        title="To date (dd/mm/yy or dd/mm/yyyy)"
-        className={`${toInvalid ? invalidCls : validCls} w-28 shrink-0`}
-      />
+      {/* ── Date range ───────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        <input
+          type="text"
+          inputMode="numeric"
+          placeholder="From dd/mm/yy"
+          value={rawFrom}
+          onChange={(e) => handleDateChange(e.target.value, setRawFrom, 'dateFrom')}
+          title="From date (dd/mm/yy or dd/mm/yyyy)"
+          className={fromInvalid ? dateInvalidCls : dateValidCls}
+        />
+        <span className="text-slate-300 shrink-0 select-none">—</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          placeholder="To dd/mm/yy"
+          value={rawTo}
+          onChange={(e) => handleDateChange(e.target.value, setRawTo, 'dateTo')}
+          title="To date (dd/mm/yy or dd/mm/yyyy)"
+          className={toInvalid ? dateInvalidCls : dateValidCls}
+        />
+      </div>
 
-      {/* Clear */}
+      {/* ── Clear all ────────────────────────────────────────────────────── */}
       {hasActive && (
         <button
           type="button"
           onClick={handleClear}
-          className="shrink-0 rounded-md px-2 py-2 text-xs text-slate-400 hover:bg-white hover:text-slate-600 transition-colors"
           title="Clear all filters"
+          className="h-9 flex items-center gap-1 shrink-0 rounded-lg border border-slate-300
+            bg-white px-3 text-xs font-medium text-slate-500 shadow-sm
+            hover:border-red-300 hover:text-red-500 hover:bg-red-50 transition-colors"
         >
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
           Clear
         </button>
       )}
+
     </div>
   );
 }
