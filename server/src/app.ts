@@ -7,6 +7,7 @@ import settingsRoutes from './routes/settingsRoutes';
 import importRoutes from './routes/importRoutes';
 import bankBalanceRoutes from './routes/bankBalanceRoutes';
 import bankReconciliationRoutes from './routes/bankReconciliationRoutes';
+import bankStatementRoutes from './routes/bankStatementRoutes';
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use('/api/settings', authMiddleware, settingsRoutes);
 app.use('/api/import', authMiddleware, importRoutes);
 app.use('/api/bank-balances', authMiddleware, bankBalanceRoutes);
 app.use('/api/bank-reconciliation', authMiddleware, bankReconciliationRoutes);
+app.use('/api/bank-statements', authMiddleware, bankStatementRoutes);
 
 app.use(errorHandler);
 

@@ -108,7 +108,7 @@ export function parseDateToISO(val: unknown): string | null {
 }
 
 // ── Value normalisers ─────────────────────────────────────────────────────────
-function parseAmount(val: unknown): number | null {
+export function parseAmount(val: unknown): number | null {
   if (typeof val === 'number') return val > 0 ? val : null;
   if (typeof val === 'string') {
     // strip currency symbols, commas, spaces

@@ -9,6 +9,7 @@ import { LedgersPage } from '@/pages/LedgersPage';
 import { FeeRegisterPage } from '@/pages/FeeRegisterPage';
 import { SalaryRegisterPage } from '@/pages/SalaryRegisterPage';
 import { BankAccountsPage } from '@/pages/BankAccountsPage';
+import { BankStatementsPage } from '@/pages/BankStatementsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { Spinner } from '@/components/ui/Spinner';
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="fee-register" element={<FeeRegisterPage />} />
           <Route path="salary-register" element={<SalaryRegisterPage />} />
           <Route path="bank-accounts" element={<BankAccountsPage />} />
+          <Route path="bank-statements" element={<BankStatementsPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
