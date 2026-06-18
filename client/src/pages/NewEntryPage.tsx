@@ -389,7 +389,7 @@ export function NewEntryPage() {
   const tabs: EntryType[] = ['Receipt', 'Payment'];
 
   return (
-    <div className="w-full pt-6 animate-fade-in space-y-6">
+    <div className="w-full pt-6 space-y-6" style={{ animation: 'page-enter 0.22s ease-out' }}>
 
       {/* ── Entry form ── */}
       <form ref={formRef} onSubmit={handleSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">

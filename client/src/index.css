@@ -48,6 +48,11 @@
   100% { transform: translateX(260%); width: 40%; }
 }
 
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 @keyframes tooltip-pop {
   from { opacity: 0; transform: translateY(-50%) scale(0.85); }
   to   { opacity: 1; transform: translateY(-50%) scale(1); }

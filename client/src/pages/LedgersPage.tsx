@@ -664,7 +664,7 @@ export function LedgersPage() {
 
   // ── List view ──
   return (
-    <div className="w-full pb-6">
+    <div className="w-full pb-6" style={{ animation: 'page-enter 0.22s ease-out' }}>
       {/* Sticky search + compare action bar */}
       <div className="sticky top-0 z-20 -mx-6 px-6 py-3 bg-slate-50/95 backdrop-blur-sm border-b border-slate-200 mb-4">
         <div className="flex items-center gap-2">

@@ -47,7 +47,7 @@ export function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-sm">
+      <div className="w-full max-w-sm" style={{ animation: 'page-enter 0.22s ease-out' }}>
         <div className="mb-6 text-center">
           <h1 className="text-lg font-semibold text-slate-800">SMP Cash Book</h1>
           <p className="mt-0.5 text-xs text-slate-400">Sanjay Memorial Polytechnic</p>

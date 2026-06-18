@@ -743,7 +743,7 @@ export function HomePage() {
   const allFYs    = [settings.activeFinancialYear, ...otherFYs];
 
   return (
-    <div className="flex flex-col gap-6 animate-fade-in pb-8 pt-1">
+    <div className="flex flex-col gap-6 pb-8 pt-1" style={{ animation: 'page-enter 0.22s ease-out' }}>
 
       {/* ── Greeting ── */}
       <div className="flex items-center justify-between flex-wrap gap-3">

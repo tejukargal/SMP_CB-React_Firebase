@@ -132,7 +132,7 @@ export function SalaryRegisterPage() {
   const showCashBookBadge   = settings.activeCashBookType === 'Both';
 
   return (
-    <div className="flex flex-col gap-4 animate-fade-in pb-6">
+    <div className="flex flex-col gap-4 pb-6" style={{ animation: 'page-enter 0.22s ease-out' }}>
 
       {/* ── Sticky filter / action bar ── */}
       <div className="sticky top-0 z-20 -mx-6 px-6 py-3 bg-slate-50/95 backdrop-blur-sm border-b border-slate-200">

@@ -10,7 +10,7 @@ export function EntriesPage() {
   );
 
   return (
-    <div className="w-full animate-fade-in pb-6">
+    <div className="w-full pb-6" style={{ animation: 'page-enter 0.22s ease-out' }}>
       <EntryList entries={entries} loading={loading} refreshing={refreshing} error={error} />
     </div>
   );
