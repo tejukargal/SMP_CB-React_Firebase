@@ -579,17 +579,19 @@ export function EntryList({ entries, loading, refreshing, error }: EntryListProp
   const [filters, setFilters] = useState<FilterState>(INIT_FILTERS);
   const [viewMode, setViewMode] = useState<ViewMode>('date');
   const prevSearchRef = useRef('');
+  const prevHOARef    = useRef('');
   const { settings } = useSettings();
   const { addToast } = useToast();
 
-  // Switch to Split when searching; return to By Date when cleared
+  // Switch to Split when searching or filtering by Head of Account; return to By Date when both cleared
   useEffect(() => {
-    const hadSearch = prevSearchRef.current.trim().length > 0;
-    const hasSearch = filters.search.trim().length > 0;
-    if (!hadSearch && hasSearch) setViewMode('split');
-    if (hadSearch && !hasSearch) setViewMode('date');
+    const hadFilter = prevSearchRef.current.trim().length > 0 || prevHOARef.current.length > 0;
+    const hasFilter = filters.search.trim().length > 0 || filters.headOfAccount.length > 0;
+    if (!hadFilter && hasFilter) setViewMode('split');
+    if (hadFilter && !hasFilter) setViewMode('date');
     prevSearchRef.current = filters.search;
-  }, [filters.search]);
+    prevHOARef.current    = filters.headOfAccount;
+  }, [filters.search, filters.headOfAccount]);
 
   // ── Bulk select state ────────────────────────────────────────────────────
   const [selectMode, setSelectMode]     = useState(false);

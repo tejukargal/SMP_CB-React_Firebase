@@ -7,7 +7,7 @@ export function TopBar() {
 
   return (
     <div className="flex w-full items-center justify-between">
-      <span className="text-sm font-medium text-slate-500">
+      <span className="text-lg font-semibold tracking-wide text-slate-700">
         Sanjay Memorial Polytechnic
       </span>
       <Link
