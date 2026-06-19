@@ -19,7 +19,7 @@ import {
   apiSetOpeningBalance,
 } from '@/api/bankStatements';
 import { EntrySkeleton }          from '@/components/entries/EntrySkeleton';
-import type { BankKey, BankStatementTxn } from '@smp-cashbook/shared';
+import type { BankKey, BankStatementTxn, Entry } from '@smp-cashbook/shared';
 import type { ParsedBankRow }     from '@/utils/parseBankStatementFile';
 
 // ── Bank account definitions (mirrors BankAccountsPage) ──────────────────────
@@ -534,6 +534,8 @@ export function BankStatementsPage() {
   const [editingOpeningBal, setEditingOpeningBal]   = useState(false);
   const [openingBalInput, setOpeningBalInput]       = useState('');
   const [savingOpeningBal, setSavingOpeningBal]     = useState(false);
+  const [showCBMatch, setShowCBMatch]               = useState(false);
+  const [cbMatchFilter, setCbMatchFilter]           = useState<'all' | 'matched' | 'unmatched'>('all');
 
   const bank = BANK_ACCOUNTS.find(b => b.key === selectedKey)!;
   const fy   = settings.activeFinancialYear;
@@ -561,6 +563,41 @@ export function BankStatementsPage() {
   const totalDebit  = useMemo(() => transactions.reduce((s, t) => s + t.debit,  0), [transactions]);
   const totalCredit = useMemo(() => transactions.reduce((s, t) => s + t.credit, 0), [transactions]);
   const matchedCount = useMemo(() => transactions.filter(t => t.reconciledEntryId).length, [transactions]);
+
+  // CB match: for each bank txn find the best-matching Cash Book entry by type + amount + date (±3 days)
+  const cbMatchMap = useMemo<Map<string, Entry | null>>(() => {
+    const map = new Map<string, Entry | null>();
+    if (!showCBMatch) return map;
+    for (const txn of transactions) {
+      const targetType = txn.debit > 0 ? 'Receipt' : 'Payment';
+      const targetAmt  = txn.debit > 0 ? txn.debit : txn.credit;
+      const txnTime    = new Date(txn.date).getTime();
+      let best: Entry | null = null;
+      let bestDiff = Infinity;
+      for (const entry of entries) {
+        if (entry.type !== targetType) continue;
+        if (Math.abs(entry.amount - targetAmt) > 0.01) continue;
+        const diff = Math.abs(new Date(entry.date).getTime() - txnTime);
+        if (diff <= 3 * 86400000 && diff < bestDiff) { bestDiff = diff; best = entry; }
+      }
+      map.set(txn.id, best);
+    }
+    return map;
+  }, [showCBMatch, transactions, entries]);
+
+  const cbMatchedCount = useMemo(() => {
+    let n = 0;
+    cbMatchMap.forEach(v => { if (v) n++; });
+    return n;
+  }, [cbMatchMap]);
+
+  const displayTransactions = useMemo(() => {
+    if (!showCBMatch || cbMatchFilter === 'all') return transactions;
+    return transactions.filter(txn => {
+      const hasMatch = !!cbMatchMap.get(txn.id);
+      return cbMatchFilter === 'matched' ? hasMatch : !hasMatch;
+    });
+  }, [showCBMatch, cbMatchFilter, transactions, cbMatchMap]);
 
   const computedOpeningBalance = useMemo(() => {
     if (!transactions.length) return 0;
@@ -784,31 +821,97 @@ export function BankStatementsPage() {
         <div className={`rounded-b-xl border-x border-b ${borderCl}`}>
 
           {/* Statement toolbar */}
-          <div className="sticky top-[54px] z-10 px-5 py-2.5 bg-white border-b border-slate-100
-            flex items-center justify-between flex-wrap gap-3">
+          <div className="sticky top-[54px] z-10 px-5 py-2.5 bg-white border-b border-slate-100 flex flex-col gap-2">
 
-            <div className="flex items-center gap-3 flex-wrap text-xs text-slate-500">
-              {/* Closing balance chip */}
-              <div className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 ${
-                closingBalance >= 0 ? 'border-blue-200 bg-blue-50' : 'border-orange-200 bg-orange-50'
-              }`}>
-                <span className={closingBalance >= 0 ? 'text-blue-500' : 'text-orange-500'}>Closing Balance</span>
-                <span className={`font-semibold ${closingBalance >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
-                  {formatCurrency(Math.abs(closingBalance))}{closingBalance < 0 ? ' Dr' : ''}
-                </span>
+            {/* Row 1: summary chips + export / delete */}
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3 flex-wrap text-xs text-slate-500">
+                {/* Closing balance chip */}
+                <div className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 ${
+                  closingBalance >= 0 ? 'border-blue-200 bg-blue-50' : 'border-orange-200 bg-orange-50'
+                }`}>
+                  <span className={closingBalance >= 0 ? 'text-blue-500' : 'text-orange-500'}>Closing Balance</span>
+                  <span className={`font-semibold ${closingBalance >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
+                    {formatCurrency(Math.abs(closingBalance))}{closingBalance < 0 ? ' Dr' : ''}
+                  </span>
+                </div>
+
+                {/* Total debit chip */}
+                <div className="flex items-center gap-1.5 rounded-md border border-green-200 bg-green-50 px-2.5 py-1">
+                  <span className="text-green-600">Total Debit</span>
+                  <span className="font-semibold text-green-700">{formatCurrency(totalDebit)}</span>
+                </div>
+
+                {/* Total credit chip */}
+                <div className="flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-2.5 py-1">
+                  <span className="text-red-500">Total Credit</span>
+                  <span className="font-semibold text-red-700">{formatCurrency(totalCredit)}</span>
+                </div>
+
+                {/* Reconciliation stats */}
+                {reconcileMode && (
+                  <div className="flex items-center gap-1.5 rounded-md border border-green-200 bg-green-50 px-2.5 py-1">
+                    <svg className="h-3 w-3 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-green-700 font-medium">{matchedCount}/{transactions.length} matched</span>
+                  </div>
+                )}
+
+                {/* CB match stats */}
+                {showCBMatch && (
+                  <div className="flex items-center gap-1.5 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1">
+                    <svg className="h-3 w-3 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                    </svg>
+                    <span className="text-violet-700 font-medium">{cbMatchedCount}/{transactions.length} CB matched</span>
+                  </div>
+                )}
               </div>
 
-              {/* Reconciliation stats */}
-              {reconcileMode && (
-                <div className="flex items-center gap-1.5 rounded-md border border-green-200 bg-green-50 px-2.5 py-1">
-                  <svg className="h-3 w-3 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              {/* Export PDF / Excel / Delete */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => exportImportedBankStatementPDF(exportParams)}
+                  className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5
+                    text-xs font-medium text-slate-600 hover:border-red-300 hover:text-red-600
+                    hover:bg-red-50 transition-colors whitespace-nowrap"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                   </svg>
-                  <span className="text-green-700 font-medium">{matchedCount}/{transactions.length} matched</span>
-                </div>
-              )}
+                  PDF
+                </button>
+                <button
+                  onClick={() => exportImportedBankStatementExcel(exportParams)}
+                  className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5
+                    text-xs font-medium text-slate-600 hover:border-green-300 hover:text-green-700
+                    hover:bg-green-50 transition-colors whitespace-nowrap"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M3 10h18M3 6h18M3 14h18M3 18h18" />
+                  </svg>
+                  Excel
+                </button>
+                <button
+                  onClick={() => setShowDelete(true)}
+                  className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5
+                    text-xs font-medium text-slate-400 hover:border-red-300 hover:text-red-500
+                    hover:bg-red-50 transition-colors"
+                  title="Delete all imported data for this bank"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
+            {/* Row 2: Reconcile + Auto-match + Match CB */}
             <div className="flex items-center gap-2 flex-wrap">
               {/* Reconcile toggle */}
               <button
@@ -841,47 +944,41 @@ export function BankStatementsPage() {
                 </button>
               )}
 
-              {/* Export PDF */}
+              {/* Match with CB toggle */}
               <button
-                onClick={() => exportImportedBankStatementPDF(exportParams)}
-                className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5
-                  text-xs font-medium text-slate-600 hover:border-red-300 hover:text-red-600
-                  hover:bg-red-50 transition-colors whitespace-nowrap"
+                onClick={() => { setShowCBMatch(m => !m); setCbMatchFilter('all'); }}
+                className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium
+                  transition-colors whitespace-nowrap ${
+                  showCBMatch
+                    ? 'bg-violet-600 text-white border-violet-600 hover:bg-violet-700'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-violet-300 hover:text-violet-600'
+                }`}
               >
                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                 </svg>
-                PDF
+                Match CB
               </button>
 
-              {/* Export Excel */}
-              <button
-                onClick={() => exportImportedBankStatementExcel(exportParams)}
-                className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5
-                  text-xs font-medium text-slate-600 hover:border-green-300 hover:text-green-700
-                  hover:bg-green-50 transition-colors whitespace-nowrap"
-              >
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M3 10h18M3 6h18M3 14h18M3 18h18" />
-                </svg>
-                Excel
-              </button>
-
-              {/* Delete */}
-              <button
-                onClick={() => setShowDelete(true)}
-                className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5
-                  text-xs font-medium text-slate-400 hover:border-red-300 hover:text-red-500
-                  hover:bg-red-50 transition-colors"
-                title="Delete all imported data for this bank"
-              >
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
+              {/* Match / Unmatched filter — only visible when Match CB is on */}
+              {showCBMatch && (
+                <div className="flex items-center rounded-md border border-violet-200 overflow-hidden text-xs font-medium ml-1">
+                  {(['all', 'matched', 'unmatched'] as const).map((f, i) => (
+                    <button
+                      key={f}
+                      onClick={() => setCbMatchFilter(f)}
+                      className={`px-2.5 py-1.5 whitespace-nowrap transition-colors ${
+                        cbMatchFilter === f
+                          ? 'bg-violet-600 text-white'
+                          : 'bg-white text-slate-600 hover:bg-violet-50 hover:text-violet-700'
+                      } ${i > 0 ? 'border-l border-violet-200' : ''}`}
+                    >
+                      {f === 'all' ? 'All' : f === 'matched' ? 'Matched' : 'Not Matched'}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -896,9 +993,11 @@ export function BankStatementsPage() {
                 <col className="w-[130px]"/>
                 <col className="w-[130px]"/>
                 {reconcileMode && <col className="w-[160px]"/>}
+                {showCBMatch && <col className="w-[150px]"/>}
+                {showCBMatch && <col className="w-[160px]"/>}
               </colgroup>
 
-              <thead className="sticky top-[98px] z-[5]">
+              <thead className="sticky top-[130px] z-[5]">
                 <tr className={`border-b border-${bank.color}-100 ${theadBg}`}>
                   {['Date','Narration','Cheque / Ref','Debit (Dr)','Credit (Cr)','Balance'].map((h, i) => (
                     <th key={h} className={`py-2 text-xs font-semibold text-slate-600 whitespace-nowrap ${
@@ -906,9 +1005,15 @@ export function BankStatementsPage() {
                     } ${i >= 3 ? 'text-right' : ''}`}>{h}</th>
                   ))}
                   {reconcileMode && (
-                    <th className="pl-2 pr-5 py-2 text-xs font-semibold text-teal-600 whitespace-nowrap">
+                    <th className="pl-2 pr-2 py-2 text-xs font-semibold text-teal-600 whitespace-nowrap">
                       Cash Book Match
                     </th>
+                  )}
+                  {showCBMatch && (
+                    <th className="pl-2 pr-2 py-2 text-xs font-semibold text-violet-600 whitespace-nowrap">CB Head</th>
+                  )}
+                  {showCBMatch && (
+                    <th className="pl-2 pr-5 py-2 text-xs font-semibold text-violet-600 whitespace-nowrap">CB Notes</th>
                   )}
                 </tr>
 
@@ -954,12 +1059,14 @@ export function BankStatementsPage() {
                       </button>
                     )}
                   </td>
-                  {reconcileMode && <td className="pl-2 pr-5" />}
+                  {reconcileMode && <td className="pl-2 pr-2" />}
+                  {showCBMatch && <td className="pl-2 pr-2" />}
+                  {showCBMatch && <td className="pl-2 pr-5" />}
                 </tr>
               </thead>
 
               <tbody>
-                {transactions.map(txn => {
+                {displayTransactions.map(txn => {
                   const isMatched = !!txn.reconciledEntryId;
                   const matchedEntry = isMatched
                     ? relevantEntries.find(e => e.id === txn.reconciledEntryId)
@@ -1001,7 +1108,7 @@ export function BankStatementsPage() {
                       </td>
 
                       {reconcileMode && (
-                        <td className="pl-2 pr-5 py-2.5">
+                        <td className="pl-2 pr-2 py-2.5">
                           <div className="relative">
                             <button
                               onClick={() => setReconPopoverTxnId(isPopoverOpen ? null : txn.id)}
@@ -1041,6 +1148,25 @@ export function BankStatementsPage() {
                           </div>
                         </td>
                       )}
+
+                      {showCBMatch && (() => {
+                        const cb = cbMatchMap.get(txn.id);
+                        return (
+                          <>
+                            <td className="pl-2 pr-2 py-2.5 text-xs whitespace-nowrap">
+                              {cb
+                                ? <span className="font-medium text-violet-700">{cb.headOfAccount}</span>
+                                : <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-400">Not Matched</span>
+                              }
+                            </td>
+                            <td className="pl-2 pr-5 py-2.5 text-xs text-slate-500 overflow-hidden max-w-0">
+                              <span className="block truncate" title={cb?.notes || ''}>
+                                {cb?.notes || '—'}
+                              </span>
+                            </td>
+                          </>
+                        );
+                      })()}
                     </tr>
                   );
                 })}
@@ -1063,10 +1189,16 @@ export function BankStatementsPage() {
                     {formatCurrency(Math.abs(closingBalance))}{closingBalance < 0 ? ' Dr' : ''}
                   </td>
                   {reconcileMode && (
-                    <td className="pl-2 pr-5 py-2.5 text-xs font-semibold text-teal-700 whitespace-nowrap">
+                    <td className="pl-2 pr-2 py-2.5 text-xs font-semibold text-teal-700 whitespace-nowrap">
                       {matchedCount}/{transactions.length} matched
                     </td>
                   )}
+                  {showCBMatch && (
+                    <td className="pl-2 pr-2 py-2.5 text-xs font-semibold text-violet-700 whitespace-nowrap">
+                      {cbMatchedCount}/{transactions.length} CB matched
+                    </td>
+                  )}
+                  {showCBMatch && <td className="pl-2 pr-5 py-2.5" />}
                 </tr>
               </tfoot>
             </table>

@@ -413,6 +413,18 @@ function StatementTable({
             </span>
           </div>
 
+          {/* Total debit chip */}
+          <div className="flex items-center gap-1.5 rounded-md border border-green-200 bg-green-50 px-2.5 py-1">
+            <span className="text-xs text-green-600">Total Debit</span>
+            <span className="text-xs font-semibold text-green-700">{formatCurrency(totalDebit)}</span>
+          </div>
+
+          {/* Total credit chip */}
+          <div className="flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-2.5 py-1">
+            <span className="text-xs text-red-500">Total Credit</span>
+            <span className="text-xs font-semibold text-red-700">{formatCurrency(totalCredit)}</span>
+          </div>
+
           {/* Export buttons */}
           <button
             onClick={() => exportBankStatementPDF(exportParams)}
