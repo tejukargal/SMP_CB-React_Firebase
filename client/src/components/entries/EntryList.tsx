@@ -78,7 +78,7 @@ const VIEW_META: Record<ViewMode, { label: string; title: string; icon: React.Re
 // ── Shared table shell ────────────────────────────────────────────────────────
 
 /** Colgroup + thead for the compact (no type badge) split/date panels */
-function CompactTableHead({ sticky, selectMode }: { sticky?: boolean; selectMode?: boolean }) {
+function CompactTableHead({ sticky, stickyTop, selectMode }: { sticky?: boolean; stickyTop?: string; selectMode?: boolean }) {
   return (
     <>
       <colgroup>
@@ -88,7 +88,7 @@ function CompactTableHead({ sticky, selectMode }: { sticky?: boolean; selectMode
         <col className="w-[100px]" />
         <col className="w-[120px]" />
       </colgroup>
-      <thead className={sticky ? `sticky ${THEAD_TOP} z-10` : undefined}>
+      <thead className={sticky ? `sticky ${stickyTop ?? THEAD_TOP} z-[5]` : undefined}>
         <tr className="border-b border-slate-100 bg-white">
           {selectMode && <th className="w-[36px]" />}
           <th className="py-2 pl-4 pr-2 text-xs font-medium text-slate-500 whitespace-nowrap">Date</th>
@@ -222,8 +222,9 @@ const SplitTable = memo(function SplitTable({
 
   return (
     <div className="flex flex-col min-w-0">
-      <div className={`flex items-center justify-between rounded-t-lg border-x border-t px-4 py-2.5
-        ${isReceipt ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}
+      {/* Sticky section header — sticks just below the filter bar */}
+      <div className={`sticky top-[54px] z-10 flex items-center justify-between border-x border-t px-4 py-2.5
+        ${isReceipt ? 'rounded-t-lg border-green-200 bg-green-50' : 'rounded-t-lg border-red-200 bg-red-50'}`}
       >
         <span className={`text-xs font-semibold uppercase tracking-wide text-${color}-700`}>
           {type}s
@@ -246,7 +247,8 @@ const SplitTable = memo(function SplitTable({
       ) : (
         <div className={`border-x ${isReceipt ? 'border-green-200' : 'border-red-200'}`}>
           <table className="w-full text-left text-sm table-fixed">
-            <CompactTableHead sticky selectMode={selectMode} />
+            {/* Column headers sticky below the section header (~38px) */}
+            <CompactTableHead sticky stickyTop="top-[92px]" selectMode={selectMode} />
             <tbody>
               {entries.map((entry) => (
                 <EntryRow
@@ -697,6 +699,14 @@ export function EntryList({ entries, loading, refreshing, error }: EntryListProp
   const totalP     = useMemo(() => filtered.filter(e => e.type === 'Payment').reduce((s, e) => s + e.amount, 0), [filtered]);
   const netBalance = totalR - totalP;
 
+  // Top-3 head-of-account suggestions ranked by frequency in filtered results
+  const searchSuggestions = useMemo(() => {
+    if (!filters.search.trim()) return [];
+    const counts = new Map<string, number>();
+    for (const e of filtered) counts.set(e.headOfAccount, (counts.get(e.headOfAccount) ?? 0) + 1);
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([h]) => h);
+  }, [filtered, filters.search]);
+
   // Paginated splits for the split view panels
   const receipts = useMemo(() => paginatedFiltered.filter((e) => e.type === 'Receipt'), [paginatedFiltered]);
   const payments = useMemo(() => paginatedFiltered.filter((e) => e.type === 'Payment'), [paginatedFiltered]);
@@ -870,7 +880,7 @@ export function EntryList({ entries, loading, refreshing, error }: EntryListProp
       )}
 
       {/* ── Summary bar ── */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
           <span className="text-xs text-green-600">Total Receipts</span>
           <span className="text-sm font-semibold text-green-700">{formatCurrency(totalR)}</span>
@@ -889,6 +899,47 @@ export function EntryList({ entries, loading, refreshing, error }: EntryListProp
             {formatCurrency(Math.abs(netBalance))}{netBalance < 0 && ' (Dr)'}
           </span>
         </div>
+
+        {/* Search suggestions — top 3 HOAs by match frequency */}
+        {searchSuggestions.length > 0 && (
+          <>
+            <div className="w-px h-6 shrink-0 bg-slate-200" />
+            {searchSuggestions.map(head => (
+              <button
+                key={head}
+                type="button"
+                onClick={() => setFilters(f => ({ ...f, headOfAccount: f.headOfAccount === head ? '' : head }))}
+                className={`flex items-center rounded-lg border px-3 py-2 text-xs font-medium
+                  whitespace-nowrap transition-colors ${
+                    filters.headOfAccount === head
+                      ? 'border-blue-400 bg-blue-100 text-blue-700'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600'
+                  }`}
+              >
+                {head}
+              </button>
+            ))}
+          </>
+        )}
+
+        {/* Clear all — visible whenever any filter is active */}
+        {(filters.search || filters.headOfAccount || filters.dateFrom || filters.dateTo || filters.typeFilter !== 'All') && (
+          <>
+            <div className="w-px h-6 shrink-0 bg-slate-200" />
+            <button
+              type="button"
+              onClick={() => setFilters(INIT_FILTERS)}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white
+                px-3 py-2 text-xs font-medium text-slate-500 whitespace-nowrap
+                hover:border-red-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+            >
+              <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+                <path d="M1 1l7 7M8 1L1 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+              Clear all
+            </button>
+          </>
+        )}
       </div>
 
       {/* ── Content — switches by viewMode ── */}

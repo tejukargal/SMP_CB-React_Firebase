@@ -39,6 +39,8 @@ export interface BankStmtExportParams {
   totalDebit:      number;
   totalCredit:     number;
   closingBalance:  number;
+  /** When Match CB is active, one entry per transaction (null = not matched). */
+  cbMatchRows?:    Array<{ headOfAccount: string; notes: string } | null>;
 }
 
 // ── PDF export ────────────────────────────────────────────────────────────────
@@ -60,18 +62,24 @@ export function exportImportedBankStatementPDF(p: BankStmtExportParams) {
   );
   doc.setTextColor(0, 0, 0);
 
+  const hasCB = !!p.cbMatchRows;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const body: any[] = [
     [p.openingDateStr, 'Opening Balance', '', '—', fmtAmt(p.openingBalance), fmtAmt(p.openingBalance), ''],
-    ...p.transactions.map(txn => [
-      formatDate(txn.date),
-      txn.narration || '—',
-      txn.chequeNo  || '—',
-      txn.debit  > 0 ? fmtAmt(txn.debit)  : '—',
-      txn.credit > 0 ? fmtAmt(txn.credit) : '—',
-      `${fmtAmt(Math.abs(txn.balance))}${txn.balance < 0 ? ' Dr' : ''}`,
-      txn.reconciledEntryId ? '✓' : '✗',
-    ]),
+    ...p.transactions.map((txn, i) => {
+      const cb   = hasCB ? p.cbMatchRows![i] : null;
+      const col1 = hasCB ? (cb?.headOfAccount || '—') : (txn.narration || '—');
+      const col2 = hasCB ? (cb?.notes         || '—') : (txn.chequeNo  || '—');
+      return [
+        formatDate(txn.date),
+        col1, col2,
+        txn.debit  > 0 ? fmtAmt(txn.debit)  : '—',
+        txn.credit > 0 ? fmtAmt(txn.credit) : '—',
+        `${fmtAmt(Math.abs(txn.balance))}${txn.balance < 0 ? ' Dr' : ''}`,
+        txn.reconciledEntryId ? '✓' : '✗',
+      ];
+    }),
     [
       `${p.transactions.length} transaction${p.transactions.length !== 1 ? 's' : ''}`,
       '', '', fmtAmt(p.totalDebit), fmtAmt(p.totalCredit), cbStr,
@@ -80,23 +88,39 @@ export function exportImportedBankStatementPDF(p: BankStmtExportParams) {
   ];
   const TOTAL_IDX = body.length - 1;
 
+  const head = hasCB
+    ? [['Date', 'CB Head', 'CB Notes', 'Debit (Dr)', 'Credit (Cr)', 'Balance', 'Status']]
+    : [['Date', 'Narration', 'Cheque / Ref', 'Debit (Dr)', 'Credit (Cr)', 'Balance', 'Status']];
+
+  const columnStyles = hasCB
+    ? {
+        0: { cellWidth: 22 },
+        1: { cellWidth: 60, overflow: 'ellipsize' as const },
+        2: { cellWidth: 73, overflow: 'ellipsize' as const },
+        3: { cellWidth: 28, halign: 'right' as const },
+        4: { cellWidth: 28, halign: 'right' as const },
+        5: { cellWidth: 28, halign: 'right' as const },
+        6: { cellWidth: 38, halign: 'center' as const },
+      }
+    : {
+        0: { cellWidth: 22 },
+        1: { cellWidth: 105, overflow: 'ellipsize' as const },
+        2: { cellWidth: 28 },
+        3: { cellWidth: 28, halign: 'right' as const },
+        4: { cellWidth: 28, halign: 'right' as const },
+        5: { cellWidth: 28, halign: 'right' as const },
+        6: { cellWidth: 38, halign: 'center' as const },
+      };
+
   autoTable(doc, {
     startY: 22,
     margin: { left: MARGIN, right: MARGIN },
     tableWidth: 277,
-    head: [['Date', 'Narration', 'Cheque / Ref', 'Debit (Dr)', 'Credit (Cr)', 'Balance', 'Status']],
+    head,
     body,
     styles:     BASE,
     headStyles: { ...HEAD_S, minCellHeight: 10 },
-    columnStyles: {
-      0: { cellWidth: 22 },
-      1: { cellWidth: 105, overflow: 'ellipsize' as const },
-      2: { cellWidth: 28 },
-      3: { cellWidth: 28, halign: 'right' },
-      4: { cellWidth: 28, halign: 'right' },
-      5: { cellWidth: 28, halign: 'right' },
-      6: { cellWidth: 38, halign: 'center' },
-    },
+    columnStyles,
     didParseCell: (data) => {
       if (data.section !== 'body') return;
       const idx = data.row.index;
@@ -115,6 +139,11 @@ export function exportImportedBankStatementPDF(p: BankStmtExportParams) {
           data.cell.styles.textColor = txn.reconciledEntryId ? [21, 128, 61] as RGB : [180, 83, 9] as RGB;
           data.cell.styles.fontStyle = 'bold';
         }
+      } else if (hasCB && data.column.index === 1 && idx > 0 && idx < TOTAL_IDX) {
+        // Highlight unmatched CB Head cells
+        if (!p.cbMatchRows![idx - 1]) {
+          data.cell.styles.textColor = [148, 163, 184] as RGB;
+        }
       }
     },
   });
@@ -125,18 +154,27 @@ export function exportImportedBankStatementPDF(p: BankStmtExportParams) {
 // ── Excel export ──────────────────────────────────────────────────────────────
 
 export function exportImportedBankStatementExcel(p: BankStmtExportParams) {
+  const hasCB = !!p.cbMatchRows;
+
+  const header = hasCB
+    ? ['Date', 'CB Head', 'CB Notes', 'Debit (Dr)', 'Credit (Cr)', 'Balance', 'Reconciled']
+    : ['Date', 'Narration', 'Cheque / Ref No', 'Debit (Dr)', 'Credit (Cr)', 'Balance', 'Reconciled'];
+
   const rows: (string | number)[][] = [
-    ['Date', 'Narration', 'Cheque / Ref No', 'Debit (Dr)', 'Credit (Cr)', 'Balance', 'Reconciled'],
+    header,
     [p.openingDateStr, 'Opening Balance', '', '', p.openingBalance, p.openingBalance, ''],
-    ...p.transactions.map(txn => [
-      txn.date,
-      txn.narration,
-      txn.chequeNo,
-      txn.debit  > 0 ? txn.debit  : '',
-      txn.credit > 0 ? txn.credit : '',
-      txn.balance,
-      txn.reconciledEntryId ? 'Matched' : 'Unmatched',
-    ]),
+    ...p.transactions.map((txn, i) => {
+      const cb   = hasCB ? p.cbMatchRows![i] : null;
+      const col1 = hasCB ? (cb?.headOfAccount ?? '') : txn.narration;
+      const col2 = hasCB ? (cb?.notes         ?? '') : txn.chequeNo;
+      return [
+        txn.date, col1, col2,
+        txn.debit  > 0 ? txn.debit  : '',
+        txn.credit > 0 ? txn.credit : '',
+        txn.balance,
+        txn.reconciledEntryId ? 'Matched' : 'Unmatched',
+      ];
+    }),
     [
       `${p.transactions.length} transactions`,
       '', '', p.totalDebit, p.totalCredit, p.closingBalance,
@@ -146,11 +184,9 @@ export function exportImportedBankStatementExcel(p: BankStmtExportParams) {
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
 
-  // Column widths
-  ws['!cols'] = [
-    { wch: 14 }, { wch: 45 }, { wch: 18 },
-    { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
-  ];
+  ws['!cols'] = hasCB
+    ? [{ wch: 14 }, { wch: 35 }, { wch: 40 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }]
+    : [{ wch: 14 }, { wch: 45 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Bank Statement');

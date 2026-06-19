@@ -96,8 +96,8 @@ export const EntryRow = memo(function EntryRow({
           </td>
         )}
 
-        {/* Head of Account — fills remaining space, truncated, no wrap */}
-        <td className="px-2 py-2.5 text-sm text-slate-800 whitespace-nowrap overflow-hidden max-w-0">
+        {/* Head of Account — fills remaining space; notes overflows right into cheque/amount cols */}
+        <td className="px-2 py-2.5 text-sm text-slate-800 max-w-0 relative">
           <span className="block truncate">{entry.headOfAccount}</span>
           {showCashBookBadge && (
             <span className={`mt-0.5 inline-flex rounded px-1.5 py-0 text-[10px] font-semibold leading-4 ${
@@ -107,6 +107,17 @@ export const EntryRow = memo(function EntryRow({
             }`}>
               {entry.cashBookType === 'Aided' ? 'Aided' : 'Un-Aided'}
             </span>
+          )}
+          {compact && entry.notes && (
+            <div className="relative h-[16px] mt-0.5">
+              <span
+                className="absolute top-0 whitespace-nowrap overflow-hidden text-[11px]
+                  leading-snug text-amber-500 pointer-events-none z-10"
+                style={{ left: 0, right: '-100px' }}
+              >
+                {entry.notes}
+              </span>
+            </div>
           )}
         </td>
 
@@ -176,6 +187,8 @@ export const EntryRow = memo(function EntryRow({
           onClose={() => setVoucherOpen(false)}
         />
       )}
+
+
     </>
   );
 });

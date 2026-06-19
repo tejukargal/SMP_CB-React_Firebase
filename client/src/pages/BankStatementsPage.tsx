@@ -622,7 +622,13 @@ export function BankStatementsPage() {
     totalDebit,
     totalCredit,
     closingBalance,
-  }), [bank.label, fy, openingBalance, transactions, totalDebit, totalCredit, closingBalance]);
+    cbMatchRows: showCBMatch
+      ? transactions.map(txn => {
+          const entry = cbMatchMap.get(txn.id);
+          return entry ? { headOfAccount: entry.headOfAccount, notes: entry.notes } : null;
+        })
+      : undefined,
+  }), [bank.label, fy, openingBalance, transactions, totalDebit, totalCredit, closingBalance, showCBMatch, cbMatchMap]);
 
   // ── Auto-match ───────────────────────────────────────────────────────────────
   const handleAutoMatch = useCallback(async () => {
