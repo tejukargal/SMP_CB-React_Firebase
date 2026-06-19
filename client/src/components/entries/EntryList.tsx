@@ -26,8 +26,8 @@ const INIT_FILTERS: FilterState = {
   headOfAccount: '',
 };
 
-// Sticky top offset = filter bar height (py-3 + ~30px content ≈ 54px)
-const THEAD_TOP = 'top-[54px]';
+// Sticky top offset = filter bar height (py-3 [12+12px] + h-9 content [36px] + border-b-2 [2px] = 62px)
+const THEAD_TOP = 'top-[62px]';
 
 // ── Bulk-select shared types ───────────────────────────────────────────────────
 
@@ -88,7 +88,7 @@ function CompactTableHead({ sticky, stickyTop, selectMode }: { sticky?: boolean;
         <col className="w-[100px]" />
         <col className="w-[120px]" />
       </colgroup>
-      <thead className={sticky ? `sticky ${stickyTop ?? THEAD_TOP} z-[5]` : undefined}>
+      <thead className={sticky ? `sticky ${stickyTop ?? THEAD_TOP} z-20 bg-white` : undefined}>
         <tr className="border-b border-slate-100 bg-white">
           {selectMode && <th className="w-[36px]" />}
           <th className="py-2 pl-4 pr-2 text-xs font-medium text-slate-500 whitespace-nowrap">Date</th>
@@ -223,7 +223,7 @@ const SplitTable = memo(function SplitTable({
   return (
     <div className="flex flex-col min-w-0">
       {/* Sticky section header — sticks just below the filter bar */}
-      <div className={`sticky top-[54px] z-10 flex items-center justify-between border-x border-t px-4 py-2.5
+      <div className={`sticky top-[62px] z-30 flex items-center justify-between border-x border-t px-4 py-2.5
         ${isReceipt ? 'rounded-t-lg border-green-200 bg-green-50' : 'rounded-t-lg border-red-200 bg-red-50'}`}
       >
         <span className={`text-xs font-semibold uppercase tracking-wide text-${color}-700`}>
@@ -248,7 +248,7 @@ const SplitTable = memo(function SplitTable({
         <div className={`border-x ${isReceipt ? 'border-green-200' : 'border-red-200'}`}>
           <table className="w-full text-left text-sm table-fixed">
             {/* Column headers sticky below the section header (~38px) */}
-            <CompactTableHead sticky stickyTop="top-[92px]" selectMode={selectMode} />
+            <CompactTableHead sticky stickyTop="top-[100px]" selectMode={selectMode} />
             <tbody>
               {entries.map((entry) => (
                 <EntryRow
