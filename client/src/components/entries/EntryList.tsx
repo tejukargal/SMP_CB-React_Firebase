@@ -324,6 +324,7 @@ function DateGroupPanel({
                   entry={entry}
                   compact
                   colorAmount={false}
+                  hideNotes
                   allEntries={allEntries}
                   selectMode={selectMode}
                   selected={selectedIds.has(entry.id)}

@@ -10,6 +10,7 @@ interface EntryRowProps {
   entry:        Entry;
   compact?:     boolean;
   colorAmount?: boolean;
+  hideNotes?:   boolean;
   allEntries?:  Entry[];
   // bulk-select
   selectMode?:  boolean;
@@ -21,6 +22,7 @@ export const EntryRow = memo(function EntryRow({
   entry,
   compact     = false,
   colorAmount = true,
+  hideNotes   = false,
   allEntries  = [],
   selectMode  = false,
   selected    = false,
@@ -98,21 +100,23 @@ export const EntryRow = memo(function EntryRow({
 
         {/* Head of Account — fills remaining space; notes overflows right into cheque/amount cols */}
         <td className="px-2 py-2.5 text-sm text-slate-800 max-w-0 relative">
-          <span className="block truncate">{entry.headOfAccount}</span>
-          {showCashBookBadge && (
-            <span className={`mt-0.5 inline-flex rounded px-1.5 py-0 text-[10px] font-semibold leading-4 ${
-              entry.cashBookType === 'Aided'
-                ? 'bg-teal-50 text-teal-600'
-                : 'bg-orange-50 text-orange-600'
-            }`}>
-              {entry.cashBookType === 'Aided' ? 'Aided' : 'Un-Aided'}
-            </span>
-          )}
-          {compact && entry.notes && (
-            <div className="relative h-[16px] mt-0.5">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="truncate">{entry.headOfAccount}</span>
+            {showCashBookBadge && (
+              <span className={`shrink-0 inline-flex rounded px-1.5 py-0 text-[10px] font-semibold leading-4 ${
+                entry.cashBookType === 'Aided'
+                  ? 'bg-teal-50 text-teal-600'
+                  : 'bg-orange-50 text-orange-600'
+              }`}>
+                {entry.cashBookType === 'Aided' ? 'Aided' : 'Un-Aided'}
+              </span>
+            )}
+          </div>
+          {compact && !hideNotes && entry.notes && (
+            <div className="relative h-[16px] mt-2.5">
               <span
                 className="absolute top-0 whitespace-nowrap overflow-hidden text-[11px]
-                  leading-snug text-amber-500 pointer-events-none z-10"
+                  leading-snug text-violet-600 pointer-events-none z-10"
                 style={{ left: 0, right: '-100px' }}
               >
                 {entry.notes}
