@@ -692,7 +692,11 @@ export function HomePage() {
 
   const handleSearch = (val: string) => {
     setSearchInput(val);
-    startTransition(() => setSearchQuery(val));
+    if (!val.trim()) {
+      setSearchQuery('');           // clear immediately — no stale results
+    } else {
+      startTransition(() => setSearchQuery(val));
+    }
   };
 
   const allFYs        = [settings.activeFinancialYear, ...otherFYs];
@@ -820,7 +824,7 @@ export function HomePage() {
       <div className="pt-5">
 
         {/* Search results */}
-        <div className={`flex flex-col gap-4 ${isSearching ? '' : 'hidden'}`}>
+        <div className={isSearching ? 'flex flex-col gap-4' : 'hidden'}>
           <div className="flex items-center gap-2 h-[18px]">
             {(aL || hL) ? (
               <span className="flex items-center gap-1.5 text-xs text-slate-400">
@@ -861,7 +865,7 @@ export function HomePage() {
         </div>
 
         {/* Dashboard */}
-        <div className={`flex flex-col gap-6 ${!isSearching ? '' : 'hidden'}`}>
+        <div className={!isSearching ? 'flex flex-col gap-6' : 'hidden'}>
 
           {/* ── 4 gradient KPI cards ────────────────────────────────────────── */}
           {aL ? (
