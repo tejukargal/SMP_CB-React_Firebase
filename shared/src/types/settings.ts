@@ -1,6 +1,6 @@
 import type { CashBookType } from './entry';
 
-/** 'Both' allows viewing Aided + Un-Aided entries merged in a single view. */
+/** 'Both' allows viewing all three cashbook types merged in a single read-only view. */
 export type ActiveCashBookType = CashBookType | 'Both';
 
 export interface Settings {

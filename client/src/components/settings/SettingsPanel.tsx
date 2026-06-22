@@ -123,7 +123,7 @@ function GeneralSection() {
   const [saving, setSaving] = useState<string | null>(null);
 
   const suggestedFY = getNextFY(settings.financialYears);
-  const cashBookTypes: ActiveCashBookType[] = ['Aided', 'Un-Aided', 'Both'];
+  const cashBookTypes: ActiveCashBookType[] = ['Aided', 'Un-Aided', 'WP Un-Aided', 'Both'];
 
   const handleAddFY = async () => {
     const fy = newFY.trim() || suggestedFY;
@@ -185,6 +185,8 @@ function GeneralSection() {
                     ? 'border-green-300 bg-green-50 text-green-700 ring-2 ring-green-300'
                     : type === 'Un-Aided'
                     ? 'border-red-300 bg-red-50 text-red-700 ring-2 ring-red-300'
+                    : type === 'WP Un-Aided'
+                    ? 'border-blue-300 bg-blue-50 text-blue-700 ring-2 ring-blue-300'
                     : 'border-purple-300 bg-purple-50 text-purple-700 ring-2 ring-purple-300'
                   : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700'
               )}

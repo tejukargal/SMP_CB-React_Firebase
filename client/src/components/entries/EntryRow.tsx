@@ -106,9 +106,11 @@ export const EntryRow = memo(function EntryRow({
               <span className={`shrink-0 inline-flex rounded px-1.5 py-0 text-[10px] font-semibold leading-4 ${
                 entry.cashBookType === 'Aided'
                   ? 'bg-teal-50 text-teal-600'
-                  : 'bg-orange-50 text-orange-600'
+                  : entry.cashBookType === 'Un-Aided'
+                  ? 'bg-orange-50 text-orange-600'
+                  : 'bg-blue-50 text-blue-600'
               }`}>
-                {entry.cashBookType === 'Aided' ? 'Aided' : 'Un-Aided'}
+                {entry.cashBookType}
               </span>
             )}
           </div>

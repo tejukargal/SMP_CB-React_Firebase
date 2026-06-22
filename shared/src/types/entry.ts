@@ -1,4 +1,4 @@
-export type CashBookType = 'Aided' | 'Un-Aided';
+export type CashBookType = 'Aided' | 'Un-Aided' | 'WP Un-Aided';
 export type EntryType = 'Receipt' | 'Payment';
 
 export interface Entry {

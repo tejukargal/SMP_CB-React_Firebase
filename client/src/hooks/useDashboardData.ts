@@ -5,14 +5,16 @@ import type { Entry } from '@smp-cashbook/shared';
 
 // ── Public types ───────────────────────────────────────────────────────────────
 export interface FYStats {
-  financialYear:   string;
-  aidedReceipts:   number;
-  aidedPayments:   number;
-  unAidedReceipts: number;
-  unAidedPayments: number;
-  totalReceipts:   number;
-  totalPayments:   number;
-  entryCount:      number;
+  financialYear:    string;
+  aidedReceipts:    number;
+  aidedPayments:    number;
+  unAidedReceipts:  number;
+  unAidedPayments:  number;
+  wpUnAidedReceipts: number;
+  wpUnAidedPayments: number;
+  totalReceipts:    number;
+  totalPayments:    number;
+  entryCount:       number;
 }
 
 export interface LedgerTickerItem {
@@ -72,30 +74,35 @@ export function useDashboardData(financialYears: string[]): {
 
       await Promise.all(
         financialYears.map(async fy => {
-          const [aidedSnap, unAidedSnap] = await Promise.all([
+          const [aidedSnap, unAidedSnap, wpSnap] = await Promise.all([
             getDocs(collection(firestore, 'entries', fy, 'Aided')),
             getDocs(collection(firestore, 'entries', fy, 'Un-Aided')),
+            getDocs(collection(firestore, 'entries', fy, 'WP Un-Aided')),
           ]);
 
           const aidedEntries   = aidedSnap.docs.map(toEntry);
           const unAidedEntries = unAidedSnap.docs.map(toEntry);
-          allFetchedEntries.push(...aidedEntries, ...unAidedEntries);
+          const wpEntries      = wpSnap.docs.map(toEntry);
+          allFetchedEntries.push(...aidedEntries, ...unAidedEntries, ...wpEntries);
 
           const sum = (arr: Entry[], t: string) =>
             arr.filter(e => e.type === t).reduce((s, e) => s + e.amount, 0);
 
-          const aR = sum(aidedEntries,   'Receipt');
-          const aP = sum(aidedEntries,   'Payment');
-          const uR = sum(unAidedEntries, 'Receipt');
-          const uP = sum(unAidedEntries, 'Payment');
+          const aR  = sum(aidedEntries,   'Receipt');
+          const aP  = sum(aidedEntries,   'Payment');
+          const uR  = sum(unAidedEntries, 'Receipt');
+          const uP  = sum(unAidedEntries, 'Payment');
+          const wpR = sum(wpEntries,      'Receipt');
+          const wpP = sum(wpEntries,      'Payment');
 
           statsMap.set(fy, {
-            financialYear:   fy,
-            aidedReceipts:   aR, aidedPayments:   aP,
-            unAidedReceipts: uR, unAidedPayments: uP,
-            totalReceipts:   aR + uR,
-            totalPayments:   aP + uP,
-            entryCount:      aidedEntries.length + unAidedEntries.length,
+            financialYear:     fy,
+            aidedReceipts:     aR,  aidedPayments:     aP,
+            unAidedReceipts:   uR,  unAidedPayments:   uP,
+            wpUnAidedReceipts: wpR, wpUnAidedPayments: wpP,
+            totalReceipts:     aR + uR + wpR,
+            totalPayments:     aP + uP + wpP,
+            entryCount:        aidedEntries.length + unAidedEntries.length + wpEntries.length,
           });
 
           // Build ticker items: group by headOfAccount × cashBookType for this FY
@@ -116,6 +123,7 @@ export function useDashboardData(financialYears: string[]): {
 
           addTicker(aidedEntries,   'Aided');
           addTicker(unAidedEntries, 'Un-Aided');
+          addTicker(wpEntries,      'WP Un-Aided');
         }),
       );
 

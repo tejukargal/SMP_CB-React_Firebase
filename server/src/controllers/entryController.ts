@@ -21,8 +21,8 @@ export async function handleCreateEntry(
       res.status(400).json({ error: 'type must be Receipt or Payment' }); return;
     }
     if (!body.financialYear) { res.status(400).json({ error: 'financialYear is required' }); return; }
-    if (!body.cashBookType || !['Aided', 'Un-Aided'].includes(body.cashBookType)) {
-      res.status(400).json({ error: 'cashBookType must be Aided or Un-Aided' }); return;
+    if (!body.cashBookType || !['Aided', 'Un-Aided', 'WP Un-Aided'].includes(body.cashBookType)) {
+      res.status(400).json({ error: 'cashBookType must be Aided, Un-Aided, or WP Un-Aided' }); return;
     }
 
     const payload: CreateEntryPayload = {
@@ -147,8 +147,8 @@ export async function handleResetEntries(
       res.status(400).json({ error: 'fy query param is required (format YYYY-YY)' });
       return;
     }
-    if (!typeParam || !['Aided', 'Un-Aided'].includes(typeParam)) {
-      res.status(400).json({ error: 'type query param is required (Aided or Un-Aided)' });
+    if (!typeParam || !['Aided', 'Un-Aided', 'WP Un-Aided'].includes(typeParam)) {
+      res.status(400).json({ error: 'type query param is required (Aided, Un-Aided, or WP Un-Aided)' });
       return;
     }
     const deleted = await resetEntriesForFY(fyParam, typeParam);

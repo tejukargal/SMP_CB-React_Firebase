@@ -28,6 +28,7 @@ function getTodayLabel(): string {
 function computeStats(entries: Entry[]) {
   const aided   = entries.filter(e => e.cashBookType === 'Aided');
   const unAided = entries.filter(e => e.cashBookType === 'Un-Aided');
+  const wp      = entries.filter(e => e.cashBookType === 'WP Un-Aided');
   const sum = (arr: Entry[], t: string) =>
     arr.filter(e => e.type === t).reduce((s, e) => s + e.amount, 0);
   return {
@@ -37,9 +38,12 @@ function computeStats(entries: Entry[]) {
     aidedPayments:   sum(aided,   'Payment'),
     unAidedReceipts: sum(unAided, 'Receipt'),
     unAidedPayments: sum(unAided, 'Payment'),
+    wpReceipts:      sum(wp,      'Receipt'),
+    wpPayments:      sum(wp,      'Payment'),
     totalCount:   entries.length,
     aidedCount:   aided.length,
     unAidedCount: unAided.length,
+    wpCount:      wp.length,
   };
 }
 function buildTickerItems(entries: Entry[], fy: string): LedgerTickerItem[] {
@@ -72,7 +76,7 @@ function findBankDef(head: string) {
 // Search types
 // ─────────────────────────────────────────────────────────────────────────────
 interface Amounts { receipts: number; payments: number; }
-interface YearData { fy: string; isActive: boolean; aided: Amounts; unAided: Amounts; }
+interface YearData { fy: string; isActive: boolean; aided: Amounts; unAided: Amounts; wpUnAided: Amounts; }
 type MatchReason = 'head' | 'amount';
 interface SearchGroup { head: string; years: YearData[]; matchedBy: MatchReason[]; }
 
@@ -114,10 +118,11 @@ function buildSearchResults(
     const byFY = byHead.get(item.head)!;
     const ex = byFY.get(item.fy) ?? {
       fy: item.fy, isActive: item.fy === activeFY,
-      aided: { receipts: 0, payments: 0 }, unAided: { receipts: 0, payments: 0 },
+      aided: { receipts: 0, payments: 0 }, unAided: { receipts: 0, payments: 0 }, wpUnAided: { receipts: 0, payments: 0 },
     };
-    if (item.cashBookType === 'Aided') ex.aided = { receipts: item.receipts, payments: item.payments };
-    else                               ex.unAided = { receipts: item.receipts, payments: item.payments };
+    if (item.cashBookType === 'Aided')          ex.aided     = { receipts: item.receipts, payments: item.payments };
+    else if (item.cashBookType === 'Un-Aided')  ex.unAided   = { receipts: item.receipts, payments: item.payments };
+    else                                        ex.wpUnAided = { receipts: item.receipts, payments: item.payments };
     byFY.set(item.fy, ex);
   }
   const results: SearchGroup[] = [];
@@ -222,10 +227,11 @@ function GradientKpiCard({
 // ─────────────────────────────────────────────────────────────────────────────
 function BookCard({
   label, receipts, payments, count, color,
-}: { label: string; receipts: number; payments: number; count: number; color: 'teal' | 'orange' }) {
+}: { label: string; receipts: number; payments: number; count: number; color: 'teal' | 'orange' | 'blue' }) {
   const s = {
-    teal:   { accent: 'bg-teal-500',   badge: 'bg-teal-50 text-teal-700 border border-teal-100',   bar: 'bg-teal-400'   },
+    teal:   { accent: 'bg-teal-500',   badge: 'bg-teal-50 text-teal-700 border border-teal-100',     bar: 'bg-teal-400'   },
     orange: { accent: 'bg-orange-500', badge: 'bg-orange-50 text-orange-700 border border-orange-100', bar: 'bg-orange-400' },
+    blue:   { accent: 'bg-blue-500',   badge: 'bg-blue-50 text-blue-700 border border-blue-100',     bar: 'bg-blue-400'   },
   }[color];
   const bal  = receipts - payments;
   const rPct = (receipts + payments) > 0 ? Math.round((receipts / (receipts + payments)) * 100) : 50;
@@ -290,7 +296,7 @@ function docToEntry(doc: { id: string; data(): Record<string, any> }, cbt: strin
     id: doc.id, date: d.date ?? '', chequeNo: d.chequeNo ?? '',
     amount: d.amount ?? 0, headOfAccount: d.headOfAccount ?? '',
     notes: d.notes ?? '', type: d.type ?? 'Receipt',
-    financialYear: d.financialYear ?? '', cashBookType: cbt as 'Aided' | 'Un-Aided',
+    financialYear: d.financialYear ?? '', cashBookType: cbt as 'Aided' | 'Un-Aided' | 'WP Un-Aided',
     createdAt: d.createdAt ?? '', voucherNo: d.voucherNo,
   };
 }
@@ -335,8 +341,10 @@ function SplitPanel({ entries, type }: { entries: Entry[]; type: 'Receipt' | 'Pa
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="truncate">{e.headOfAccount}</span>
                         <span className={`shrink-0 rounded px-1.5 py-px text-[10px] font-semibold leading-4 ${
-                          e.cashBookType === 'Aided' ? 'bg-teal-50 text-teal-600' : 'bg-orange-50 text-orange-600'
-                        }`}>{e.cashBookType === 'Aided' ? 'A' : 'U'}</span>
+                          e.cashBookType === 'Aided' ? 'bg-teal-50 text-teal-600'
+                          : e.cashBookType === 'Un-Aided' ? 'bg-orange-50 text-orange-600'
+                          : 'bg-blue-50 text-blue-600'
+                        }`}>{e.cashBookType === 'Aided' ? 'A' : e.cashBookType === 'Un-Aided' ? 'U' : 'WP'}</span>
                       </div>
                     </td>
                     <td className="px-2 py-2.5 text-xs text-slate-400 whitespace-nowrap">{e.chequeNo || '—'}</td>
@@ -370,14 +378,16 @@ function LedgerSplitModal({ head, fy, onClose }: { head: string; fy: string; onC
     setLoading(true);
     (async () => {
       try {
-        const [aSnap, uSnap] = await Promise.all([
+        const [aSnap, uSnap, wpSnap] = await Promise.all([
           getDocs(collection(firestore, 'entries', fy, 'Aided')),
           getDocs(collection(firestore, 'entries', fy, 'Un-Aided')),
+          getDocs(collection(firestore, 'entries', fy, 'WP Un-Aided')),
         ]);
         if (cancelled) return;
         const all = [
           ...aSnap.docs.map(d => docToEntry(d, 'Aided')),
           ...uSnap.docs.map(d => docToEntry(d, 'Un-Aided')),
+          ...wpSnap.docs.map(d => docToEntry(d, 'WP Un-Aided')),
         ].filter(e => e.headOfAccount === head).sort((a, b) => a.date.localeCompare(b.date));
         setEntries(all);
       } catch (err) { console.error(err); }
@@ -446,9 +456,9 @@ function LedgerSplitModal({ head, fy, onClose }: { head: string; fy: string; onC
 // Search result — year row
 // ─────────────────────────────────────────────────────────────────────────────
 function YearRow({ year, onDblClick }: { year: YearData; onDblClick: () => void }) {
-  const { fy, isActive, aided, unAided } = year;
-  const totalR = aided.receipts + unAided.receipts;
-  const totalP = aided.payments + unAided.payments;
+  const { fy, isActive, aided, unAided, wpUnAided } = year;
+  const totalR = aided.receipts + unAided.receipts + wpUnAided.receipts;
+  const totalP = aided.payments + unAided.payments + wpUnAided.payments;
   const bal    = totalR - totalP;
   const fmt    = (v: number) => v > 0 ? formatCurrency(v) : <span className="text-slate-300">—</span>;
   return (
@@ -466,6 +476,8 @@ function YearRow({ year, onDblClick }: { year: YearData; onDblClick: () => void 
       <td className="px-3 py-3 text-right text-sm text-rose-600   whitespace-nowrap">{fmt(aided.payments)}</td>
       <td className="px-3 py-3 text-right text-sm text-emerald-700 whitespace-nowrap">{fmt(unAided.receipts)}</td>
       <td className="px-3 py-3 text-right text-sm text-rose-600   whitespace-nowrap">{fmt(unAided.payments)}</td>
+      <td className="px-3 py-3 text-right text-sm text-emerald-700 whitespace-nowrap">{fmt(wpUnAided.receipts)}</td>
+      <td className="px-3 py-3 text-right text-sm text-rose-600   whitespace-nowrap">{fmt(wpUnAided.payments)}</td>
       <td className="px-3 py-3 text-right text-sm font-semibold text-emerald-700 whitespace-nowrap">{formatCurrency(totalR)}</td>
       <td className="px-3 py-3 text-right text-sm font-semibold text-rose-600   whitespace-nowrap">{formatCurrency(totalP)}</td>
       <td className={`pl-3 pr-5 py-3 text-right text-sm font-bold whitespace-nowrap ${bal >= 0 ? 'text-blue-700' : 'text-amber-600'}`}>
@@ -491,15 +503,18 @@ function SearchResultGroup({ group, onOpenModal }: { group: SearchGroup; onOpenM
       </div>
       {/* Table — no extra wrapper padding so rows sit flush */}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[600px]">
+        <table className="w-full min-w-[800px]">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50/70">
               <th className="py-2.5 pl-5 pr-3 text-left text-xs font-bold text-slate-400" rowSpan={2}>FY</th>
               <th className="px-3 py-2 text-center text-xs font-bold text-teal-600 border-l border-slate-100" colSpan={2}>Aided</th>
               <th className="px-3 py-2 text-center text-xs font-bold text-orange-500 border-l border-slate-100" colSpan={2}>Un-Aided</th>
+              <th className="px-3 py-2 text-center text-xs font-bold text-blue-500 border-l border-slate-100" colSpan={2}>WP Un-Aided</th>
               <th className="px-3 py-2 text-center text-xs font-bold text-slate-400 border-l border-slate-100" colSpan={3}>Total</th>
             </tr>
             <tr className="border-b border-slate-200 bg-slate-50/70">
+              <th className="px-3 pb-2 pt-0.5 text-right text-[11px] font-semibold text-emerald-600 border-l border-slate-100">Receipts</th>
+              <th className="px-3 pb-2 pt-0.5 text-right text-[11px] font-semibold text-rose-500">Payments</th>
               <th className="px-3 pb-2 pt-0.5 text-right text-[11px] font-semibold text-emerald-600 border-l border-slate-100">Receipts</th>
               <th className="px-3 pb-2 pt-0.5 text-right text-[11px] font-semibold text-rose-500">Payments</th>
               <th className="px-3 pb-2 pt-0.5 text-right text-[11px] font-semibold text-emerald-600 border-l border-slate-100">Receipts</th>
@@ -570,8 +585,8 @@ function BankSearchResult({ group, onOpenModal }: { group: SearchGroup; onOpenMo
           <tbody>
             {group.years.map(year => {
               const ob = openingBals.get(year.fy) ?? 0;
-              const td = year.aided.receipts + year.unAided.receipts;
-              const tc = year.aided.payments + year.unAided.payments;
+              const td = year.aided.receipts + year.unAided.receipts + year.wpUnAided.receipts;
+              const tc = year.aided.payments + year.unAided.payments + year.wpUnAided.payments;
               const cb = ob + tc - td;
               return (
                 <tr key={year.fy} onDoubleClick={() => onOpenModal(group.head, year.fy)}
@@ -611,7 +626,9 @@ function TickerCard({ item }: { item: LedgerTickerItem }) {
       <span className="text-xs font-semibold text-slate-700">{item.head}</span>
       <span className="rounded-lg bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">{item.fy}</span>
       <span className={`rounded-lg px-1.5 py-0.5 text-[10px] font-semibold ${
-        item.cashBookType === 'Aided' ? 'bg-teal-50 text-teal-600' : 'bg-orange-50 text-orange-600'
+        item.cashBookType === 'Aided' ? 'bg-teal-50 text-teal-600'
+        : item.cashBookType === 'Un-Aided' ? 'bg-orange-50 text-orange-600'
+        : 'bg-blue-50 text-blue-600'
       }`}>{item.cashBookType}</span>
       {item.receipts > 0 && <span className="text-[11px] font-semibold text-emerald-600">R {formatCurrency(item.receipts)}</span>}
       {item.payments > 0 && <span className="text-[11px] font-semibold text-rose-500">P {formatCurrency(item.payments)}</span>}
@@ -645,8 +662,9 @@ export function HomePage() {
   const { user }                                  = useAuth();
   const { entries: aidedEntries,   loading: aL1 } = useEntries(settings.activeFinancialYear, 'Aided');
   const { entries: unAidedEntries, loading: aL2 } = useEntries(settings.activeFinancialYear, 'Un-Aided');
-  const activeEntries = useMemo(() => [...aidedEntries, ...unAidedEntries], [aidedEntries, unAidedEntries]);
-  const aL = aL1 || aL2;
+  const { entries: wpEntries,      loading: aL3 } = useEntries(settings.activeFinancialYear, 'WP Un-Aided');
+  const activeEntries = useMemo(() => [...aidedEntries, ...unAidedEntries, ...wpEntries], [aidedEntries, unAidedEntries, wpEntries]);
+  const aL = aL1 || aL2 || aL3;
 
   const otherFYs = useMemo(
     () => [...settings.financialYears]
@@ -750,9 +768,11 @@ export function HomePage() {
               ? 'border-teal-200 bg-teal-50 text-teal-700'
               : settings.activeCashBookType === 'Un-Aided'
                 ? 'border-orange-200 bg-orange-50 text-orange-700'
-                : 'border-slate-200 bg-slate-50 text-slate-600'
+                : settings.activeCashBookType === 'WP Un-Aided'
+                  ? 'border-blue-200 bg-blue-50 text-blue-700'
+                  : 'border-slate-200 bg-slate-50 text-slate-600'
           }`}>
-            {settings.activeCashBookType === 'Both' ? 'Aided & Un-Aided' : settings.activeCashBookType}
+            {settings.activeCashBookType === 'Both' ? 'All Books' : settings.activeCashBookType}
           </span>
           <Link to="/new-entry"
             className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1.5
@@ -900,7 +920,7 @@ export function HomePage() {
               <GradientKpiCard
                 label="Total Entries"
                 value={activeStats.totalCount}
-                badge={`${activeStats.aidedCount}A · ${activeStats.unAidedCount}U`}
+                badge={`${activeStats.aidedCount}A · ${activeStats.unAidedCount}U · ${activeStats.wpCount}WP`}
                 gradient="bg-gradient-to-br from-rose-400 to-pink-600"
                 icon={KPI_ICONS.entries}
                 isCount
@@ -908,18 +928,21 @@ export function HomePage() {
             </div>
           )}
 
-          {/* ── Aided / Un-Aided breakdown ──────────────────────────────────── */}
+          {/* ── Book breakdown ──────────────────────────────────────────────── */}
           {aL ? (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
+              <PulseSkeleton className="h-28" />
               <PulseSkeleton className="h-28" />
               <PulseSkeleton className="h-28" />
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <BookCard label="Aided" color="teal"
                 receipts={activeStats.aidedReceipts} payments={activeStats.aidedPayments} count={activeStats.aidedCount} />
               <BookCard label="Un-Aided" color="orange"
                 receipts={activeStats.unAidedReceipts} payments={activeStats.unAidedPayments} count={activeStats.unAidedCount} />
+              <BookCard label="WP Un-Aided" color="blue"
+                receipts={activeStats.wpReceipts} payments={activeStats.wpPayments} count={activeStats.wpCount} />
             </div>
           )}
 
@@ -932,7 +955,7 @@ export function HomePage() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[720px]">
+                  <table className="w-full min-w-[960px]">
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50/60">
                         <th className="py-3 pl-6 pr-3 text-left text-sm font-bold text-slate-500" rowSpan={2}>
@@ -944,6 +967,9 @@ export function HomePage() {
                         <th className="px-3 py-2.5 text-center text-xs font-bold text-orange-500 border-l border-slate-100" colSpan={2}>
                           Un-Aided
                         </th>
+                        <th className="px-3 py-2.5 text-center text-xs font-bold text-blue-500 border-l border-slate-100" colSpan={2}>
+                          WP Un-Aided
+                        </th>
                         <th className="px-3 py-2.5 text-center text-xs font-bold text-slate-500 border-l border-slate-100" colSpan={3}>
                           Combined
                         </th>
@@ -952,6 +978,8 @@ export function HomePage() {
                         </th>
                       </tr>
                       <tr className="border-b border-slate-200 bg-slate-50/60">
+                        <th className="px-3 pb-3 pt-1 text-right text-xs font-semibold text-emerald-600 border-l border-slate-100">Receipts</th>
+                        <th className="px-3 pb-3 pt-1 text-right text-xs font-semibold text-rose-500">Payments</th>
                         <th className="px-3 pb-3 pt-1 text-right text-xs font-semibold text-emerald-600 border-l border-slate-100">Receipts</th>
                         <th className="px-3 pb-3 pt-1 text-right text-xs font-semibold text-rose-500">Payments</th>
                         <th className="px-3 pb-3 pt-1 text-right text-xs font-semibold text-emerald-600 border-l border-slate-100">Receipts</th>
@@ -976,6 +1004,8 @@ export function HomePage() {
                             <td className="px-3 py-4 text-right text-sm text-rose-600   whitespace-nowrap">{fmt(s?.aidedPayments)}</td>
                             <td className="px-3 py-4 text-right text-sm text-emerald-700 whitespace-nowrap border-l border-slate-100">{fmt(s?.unAidedReceipts)}</td>
                             <td className="px-3 py-4 text-right text-sm text-rose-600   whitespace-nowrap">{fmt(s?.unAidedPayments)}</td>
+                            <td className="px-3 py-4 text-right text-sm text-emerald-700 whitespace-nowrap border-l border-slate-100">{fmt(s?.wpUnAidedReceipts)}</td>
+                            <td className="px-3 py-4 text-right text-sm text-rose-600   whitespace-nowrap">{fmt(s?.wpUnAidedPayments)}</td>
                             <td className="px-3 py-4 text-right text-sm font-semibold text-emerald-700 whitespace-nowrap border-l border-slate-100">{fmt(s?.totalReceipts)}</td>
                             <td className="px-3 py-4 text-right text-sm font-semibold text-rose-600   whitespace-nowrap">{fmt(s?.totalPayments)}</td>
                             <td className={`px-3 py-4 text-right text-sm font-bold whitespace-nowrap ${bal >= 0 ? 'text-blue-700' : 'text-amber-700'}`}>

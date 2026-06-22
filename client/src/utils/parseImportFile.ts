@@ -127,8 +127,9 @@ function parseEntryType(val: unknown): EntryType | null {
 
 function parseCashBookType(val: unknown): CashBookType | null {
   const s = String(val ?? '').trim().toLowerCase().replace(/[\s\-_]/g, '');
-  if (s === 'aided')   return 'Aided';
-  if (s === 'unaided') return 'Un-Aided';
+  if (s === 'aided')                    return 'Aided';
+  if (s === 'unaided')                  return 'Un-Aided';
+  if (s === 'wpunaided' || s === 'wpu') return 'WP Un-Aided';
   return null;
 }
 

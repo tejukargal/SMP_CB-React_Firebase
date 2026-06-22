@@ -20,7 +20,11 @@ export function TopBar() {
         ) : (
           <>
             <Badge variant="blue">{settings.activeFinancialYear}</Badge>
-            <Badge variant={settings.activeCashBookType === 'Aided' ? 'receipt' : 'payment'}>
+            <Badge variant={
+              settings.activeCashBookType === 'Aided' ? 'receipt'
+              : settings.activeCashBookType === 'WP Un-Aided' ? 'blue'
+              : 'payment'
+            }>
               {settings.activeCashBookType}
             </Badge>
           </>

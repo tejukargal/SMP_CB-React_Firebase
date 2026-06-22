@@ -67,16 +67,17 @@ export function useEntries(financialYear: string, cashBookType: ActiveCashBookTy
       return unsub;
     }
 
-    // ── Both mode: subscribe to Aided + Un-Aided, merge sorted by date ────────
+    // ── Both mode: subscribe to all 3 types, merge sorted by date ───────────
     // Using plain objects in the closure; they're recreated on each effect run.
     const state = {
       aided:   { docs: [] as Entry[], ready: false },
       unaided: { docs: [] as Entry[], ready: false },
+      wp:      { docs: [] as Entry[], ready: false },
     };
 
     const merge = () => {
-      if (!state.aided.ready || !state.unaided.ready) return; // wait for both
-      const merged = [...state.aided.docs, ...state.unaided.docs].sort((a, b) => {
+      if (!state.aided.ready || !state.unaided.ready || !state.wp.ready) return;
+      const merged = [...state.aided.docs, ...state.unaided.docs, ...state.wp.docs].sort((a, b) => {
         if (a.date !== b.date) return a.date.localeCompare(b.date);
         return a.createdAt.localeCompare(b.createdAt);
       });
@@ -92,6 +93,10 @@ export function useEntries(financialYear: string, cashBookType: ActiveCashBookTy
     );
     const qUnaided = query(
       collection(firestore, 'entries', financialYear, 'Un-Aided'),
+      orderBy('date', 'asc'),
+    );
+    const qWp = query(
+      collection(firestore, 'entries', financialYear, 'WP Un-Aided'),
       orderBy('date', 'asc'),
     );
 
@@ -115,7 +120,17 @@ export function useEntries(financialYear: string, cashBookType: ActiveCashBookTy
       (err) => { setError(err.message); setLoading(false); setRefreshing(false); },
     );
 
-    return () => { unsubAided(); unsubUnaided(); };
+    const unsubWp = onSnapshot(
+      qWp,
+      (snap) => {
+        state.wp.docs  = snap.docs.map((d) => mapDoc(d, 'WP Un-Aided', financialYear));
+        state.wp.ready = true;
+        merge();
+      },
+      (err) => { setError(err.message); setLoading(false); setRefreshing(false); },
+    );
+
+    return () => { unsubAided(); unsubUnaided(); unsubWp(); };
   }, [financialYear, cashBookType]);
 
   return { entries, loading, refreshing, error };
