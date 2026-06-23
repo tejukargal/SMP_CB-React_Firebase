@@ -380,8 +380,8 @@ export function NewEntryPage() {
         cashBookType: settings.activeCashBookType,
       });
       addToast(`${form.type} entry added successfully`, 'success');
-      setForm({ ...EMPTY_FORM, type: form.type });
       setErrors({});
+      setTimeout(() => { dateRef.current?.focus(); dateRef.current?.select(); }, 0);
     } catch (err: unknown) {
       addToast(err instanceof Error ? err.message : 'Failed to save entry', 'error');
     } finally {
@@ -389,7 +389,8 @@ export function NewEntryPage() {
     }
   };
 
-  const formRef = useRef<HTMLFormElement>(null);
+  const formRef  = useRef<HTMLFormElement>(null);
+  const dateRef  = useRef<HTMLInputElement>(null);
 
   const tabs: EntryType[] = ['Receipt', 'Payment'];
 
@@ -484,6 +485,7 @@ export function NewEntryPage() {
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div className="sm:col-span-1">
             <DateInput
+              ref={dateRef}
               label="Date"
               id="entry-date"
               value={form.date}

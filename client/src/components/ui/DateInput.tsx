@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, forwardRef } from 'react';
 import { cn } from '@/utils/cn';
 
 /** Convert ISO "YYYY-MM-DD" → display "DD/MM/YYYY" */
@@ -33,7 +33,7 @@ interface DateInputProps {
   className?: string;
 }
 
-export function DateInput({ value, onChange, label, id, error, className }: DateInputProps) {
+export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(function DateInput({ value, onChange, label, id, error, className }, ref) {
   const [display, setDisplay] = useState(() => isoToDisplay(value));
   const [localError, setLocalError] = useState('');
 
@@ -71,6 +71,7 @@ export function DateInput({ value, onChange, label, id, error, className }: Date
         </label>
       )}
       <input
+        ref={ref}
         id={id}
         type="text"
         inputMode="numeric"
@@ -91,4 +92,4 @@ export function DateInput({ value, onChange, label, id, error, className }: Date
       {shownError && <p className="text-xs text-red-600">{shownError}</p>}
     </div>
   );
-}
+});

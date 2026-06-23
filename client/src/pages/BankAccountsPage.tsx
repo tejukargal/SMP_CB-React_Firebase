@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useEntries } from '@/hooks/useEntries';
+import { useBankStatements } from '@/hooks/useBankStatements';
 import { useSettings } from '@/context/SettingsContext';
 import { useToast } from '@/context/ToastContext';
 import { formatCurrency } from '@/utils/formatCurrency';
@@ -12,7 +13,7 @@ import {
 } from '@/api/bankReconciliation';
 import { EntrySkeleton } from '@/components/entries/EntrySkeleton';
 import { exportBankStatementPDF, exportBankStatementExcel } from '@/utils/exportEntries';
-import type { Entry } from '@smp-cashbook/shared';
+import type { Entry, BankStatementTxn } from '@smp-cashbook/shared';
 
 // ── Bank account definitions ──────────────────────────────────────────────────
 
@@ -322,6 +323,13 @@ function StatementTable({
   onSetBankDate: (entryId: string, bankDate: string | null) => Promise<void>;
   reconcileMode: boolean;
 }) {
+  // Statement match state
+  const [showStmtMatch, setShowStmtMatch]     = useState(false);
+  const [stmtMatchFilter, setStmtMatchFilter] = useState<'all' | 'matched' | 'unmatched'>('all');
+
+  // Load imported bank statement transactions for this bank
+  const { transactions: stmtTxns } = useBankStatements(financialYear, bank.key);
+
   const bankEntries = useMemo(
     () =>
       entries
@@ -374,15 +382,55 @@ function StatementTable({
   const totalCredit    = useMemo(() => rows.reduce((s, r) => s + r.credit, 0), [rows]);
   const closingBalance = openingBalance + totalCredit - totalDebit;
 
+  // For each CB entry find the best-matching bank statement transaction (same amount, type, ±3 days)
+  const stmtMatchMap = useMemo<Map<string, BankStatementTxn | null>>(() => {
+    const map = new Map<string, BankStatementTxn | null>();
+    if (!showStmtMatch) return map;
+    for (const entry of bankEntries) {
+      let best: BankStatementTxn | null = null;
+      let bestDiff = Infinity;
+      for (const txn of stmtTxns) {
+        // CB Receipt → bank debit; CB Payment → bank credit
+        const txnAmt = entry.type === 'Receipt' ? txn.debit : txn.credit;
+        if (Math.abs(txnAmt - entry.amount) > 0.01) continue;
+        const diff = Math.abs(new Date(txn.date).getTime() - new Date(entry.date).getTime());
+        if (diff <= 3 * 86400000 && diff < bestDiff) { bestDiff = diff; best = txn; }
+      }
+      map.set(entry.id, best);
+    }
+    return map;
+  }, [showStmtMatch, bankEntries, stmtTxns]);
+
+  const stmtMatchedCount = useMemo(() => {
+    let n = 0;
+    stmtMatchMap.forEach(v => { if (v) n++; });
+    return n;
+  }, [stmtMatchMap]);
+
+  const displayRows = useMemo(() => {
+    if (!showStmtMatch || stmtMatchFilter === 'all') return rows;
+    return rows.filter(row => {
+      const hasMatch = !!stmtMatchMap.get(row.id);
+      return stmtMatchFilter === 'matched' ? hasMatch : !hasMatch;
+    });
+  }, [showStmtMatch, stmtMatchFilter, rows, stmtMatchMap]);
+
   const exportParams = useMemo(() => ({
     bankLabel: bank.label, financialYear, openingBalance,
     openingDateStr: openingDateLabel(financialYear),
+    showStmtMatch,
+    stmtMatchFilter,
     rows: rows.map(r => ({
       date: r.date, narration: r.narration, chequeNo: r.chequeNo,
       debit: r.debit, credit: r.credit, balance: r.balance,
+      ...(showStmtMatch && {
+        stmtMatch: stmtMatchMap.get(r.id)
+          ? { date: stmtMatchMap.get(r.id)!.date, narration: stmtMatchMap.get(r.id)!.narration }
+          : null,
+      }),
     })),
     totalDebit, totalCredit, closingBalance,
-  }), [bank.label, financialYear, openingBalance, rows, totalDebit, totalCredit, closingBalance]);
+  }), [bank.label, financialYear, openingBalance, showStmtMatch, stmtMatchFilter, stmtMatchMap, rows, totalDebit, totalCredit, closingBalance]);
 
   const theadBg     = THEAD_BG[bank.color];
   const theadBorder = THEAD_BORDER[bank.color];
@@ -390,69 +438,127 @@ function StatementTable({
   return (
     <div className={`rounded-b-xl border-x border-b ${SECTION_BORDER[bank.color]}`}>
 
-      {/* Sticky bar: opening balance + closing balance + reconcile toggle + exports */}
-      <div className="sticky top-[54px] z-10 px-5 py-2.5 bg-white border-b border-slate-100
-        flex items-center justify-between flex-wrap gap-3">
-        <OpeningBalanceEditor
-          accountKey={bank.key}
-          financialYear={financialYear}
-          value={openingBalance}
-          onSaved={(bal) => onOpeningBalanceChange(bank.key, bal)}
-        />
+      {/* Sticky bar: two rows */}
+      <div className="sticky top-[54px] z-10 bg-white border-b border-slate-100 flex flex-col">
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Closing balance chip */}
-          <div className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 ${
-            closingBalance >= 0 ? 'border-blue-200 bg-blue-50' : 'border-orange-200 bg-orange-50'
-          }`}>
-            <span className={`text-xs ${closingBalance >= 0 ? 'text-blue-500' : 'text-orange-500'}`}>
-              Book Balance
-            </span>
-            <span className={`text-xs font-semibold ${closingBalance >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
-              {formatCurrency(Math.abs(closingBalance))}{closingBalance < 0 ? ' Dr' : ''}
-            </span>
+        {/* Row 1: opening balance + chips + match toggle + exports */}
+        <div className="px-5 py-2.5 flex items-center justify-between flex-wrap gap-3">
+          <OpeningBalanceEditor
+            accountKey={bank.key}
+            financialYear={financialYear}
+            value={openingBalance}
+            onSaved={(bal) => onOpeningBalanceChange(bank.key, bal)}
+          />
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Closing balance chip */}
+            <div className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 ${
+              closingBalance >= 0 ? 'border-blue-200 bg-blue-50' : 'border-orange-200 bg-orange-50'
+            }`}>
+              <span className={`text-xs ${closingBalance >= 0 ? 'text-blue-500' : 'text-orange-500'}`}>
+                Book Balance
+              </span>
+              <span className={`text-xs font-semibold ${closingBalance >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
+                {formatCurrency(Math.abs(closingBalance))}{closingBalance < 0 ? ' Dr' : ''}
+              </span>
+            </div>
+
+            {/* Total debit chip */}
+            <div className="flex items-center gap-1.5 rounded-md border border-green-200 bg-green-50 px-2.5 py-1">
+              <span className="text-xs text-green-600">Total Debit</span>
+              <span className="text-xs font-semibold text-green-700">{formatCurrency(totalDebit)}</span>
+            </div>
+
+            {/* Total credit chip */}
+            <div className="flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-2.5 py-1">
+              <span className="text-xs text-red-500">Total Credit</span>
+              <span className="text-xs font-semibold text-red-700">{formatCurrency(totalCredit)}</span>
+            </div>
+
+            {/* Match Statement toggle */}
+            <button
+              onClick={() => { setShowStmtMatch(m => !m); setStmtMatchFilter('all'); }}
+              className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium
+                transition-colors whitespace-nowrap ${
+                showStmtMatch
+                  ? 'bg-violet-600 text-white border-violet-600 hover:bg-violet-700'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-violet-300 hover:text-violet-600'
+              }`}
+              title={stmtTxns.length === 0 ? 'No bank statement imported for this account' : 'Match against imported bank statement'}
+            >
+              <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+              Match Stmt
+            </button>
+
+            {/* Export buttons */}
+            <button
+              onClick={() => exportBankStatementPDF(exportParams)}
+              className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1
+                text-xs font-medium text-slate-600 hover:border-red-300 hover:text-red-600
+                hover:bg-red-50 transition-colors whitespace-nowrap"
+              title="Export as PDF"
+            >
+              <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+              PDF
+            </button>
+            <button
+              onClick={() => exportBankStatementExcel(exportParams)}
+              className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1
+                text-xs font-medium text-slate-600 hover:border-green-300 hover:text-green-700
+                hover:bg-green-50 transition-colors whitespace-nowrap"
+              title="Export as Excel"
+            >
+              <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M3 10h18M3 6h18M3 14h18M3 18h18" />
+              </svg>
+              Excel
+            </button>
           </div>
-
-          {/* Total debit chip */}
-          <div className="flex items-center gap-1.5 rounded-md border border-green-200 bg-green-50 px-2.5 py-1">
-            <span className="text-xs text-green-600">Total Debit</span>
-            <span className="text-xs font-semibold text-green-700">{formatCurrency(totalDebit)}</span>
-          </div>
-
-          {/* Total credit chip */}
-          <div className="flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-2.5 py-1">
-            <span className="text-xs text-red-500">Total Credit</span>
-            <span className="text-xs font-semibold text-red-700">{formatCurrency(totalCredit)}</span>
-          </div>
-
-          {/* Export buttons */}
-          <button
-            onClick={() => exportBankStatementPDF(exportParams)}
-            className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1
-              text-xs font-medium text-slate-600 hover:border-red-300 hover:text-red-600
-              hover:bg-red-50 transition-colors whitespace-nowrap"
-            title="Export as PDF"
-          >
-            <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-            </svg>
-            PDF
-          </button>
-          <button
-            onClick={() => exportBankStatementExcel(exportParams)}
-            className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1
-              text-xs font-medium text-slate-600 hover:border-green-300 hover:text-green-700
-              hover:bg-green-50 transition-colors whitespace-nowrap"
-            title="Export as Excel"
-          >
-            <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M3 10h18M3 6h18M3 14h18M3 18h18" />
-            </svg>
-            Excel
-          </button>
         </div>
+
+        {/* Row 2 (Match Stmt): stats chip + filter buttons */}
+        {showStmtMatch && (
+          <div className="px-5 py-1.5 border-t border-violet-100 bg-violet-50/40 flex items-center gap-3 flex-wrap">
+            {/* Match stats chip */}
+            <div className="flex items-center gap-1.5 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1">
+              <svg className="h-3 w-3 text-violet-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+              <span className="text-xs font-medium text-violet-700">
+                {stmtMatchedCount}/{rows.length} matched to stmt
+              </span>
+            </div>
+            {stmtTxns.length === 0 && (
+              <span className="text-xs text-amber-600 font-medium">
+                No statement imported — import one in the Bank Statements page first
+              </span>
+            )}
+            {/* Filter buttons */}
+            <div className="flex items-center rounded-md border border-violet-200 overflow-hidden text-xs font-medium ml-auto">
+              {(['all', 'matched', 'unmatched'] as const).map((f, i) => (
+                <button
+                  key={f}
+                  onClick={() => setStmtMatchFilter(f)}
+                  className={`px-2.5 py-1 whitespace-nowrap transition-colors ${
+                    stmtMatchFilter === f
+                      ? 'bg-violet-600 text-white'
+                      : 'bg-white text-slate-600 hover:bg-violet-50 hover:text-violet-700'
+                  } ${i > 0 ? 'border-l border-violet-200' : ''}`}
+                >
+                  {f === 'all' ? 'All' : f === 'matched' ? 'Matched' : 'Not in Statement'}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {bankEntries.length === 0 ? (
@@ -470,9 +576,10 @@ function StatementTable({
               <col className="w-[140px]" />
               <col className="w-[140px]" />
               {reconcileMode && <col className="w-[148px]" />}
+              {showStmtMatch && <col className="w-[160px]" />}
             </colgroup>
 
-            <thead className="sticky top-[98px] z-[5]">
+            <thead className={`sticky z-[5] ${showStmtMatch ? 'top-[130px]' : 'top-[98px]'}`}>
               <tr className={`border-b ${theadBorder} ${theadBg}`}>
                 <th className="py-2 pl-5 pr-2 text-xs font-semibold text-slate-600 whitespace-nowrap">Date</th>
                 <th className="px-2 py-2 text-xs font-semibold text-slate-600 whitespace-nowrap">Narration</th>
@@ -487,8 +594,13 @@ function StatementTable({
                   Balance
                 </th>
                 {reconcileMode && (
-                  <th className="pl-2 pr-5 py-2 text-xs font-semibold text-teal-600 whitespace-nowrap">
+                  <th className="pl-2 pr-2 py-2 text-xs font-semibold text-teal-600 whitespace-nowrap">
                     Bank Date
+                  </th>
+                )}
+                {showStmtMatch && (
+                  <th className="pl-2 pr-5 py-2 text-xs font-semibold text-violet-600 whitespace-nowrap">
+                    Stmt Match
                   </th>
                 )}
               </tr>
@@ -507,68 +619,95 @@ function StatementTable({
                 <td className="pl-2 pr-2 py-2 text-xs font-semibold text-right text-blue-700 whitespace-nowrap">
                   {formatCurrency(openingBalance)}
                 </td>
-                {reconcileMode && <td className="pl-2 pr-5" />}
+                {reconcileMode && <td className="pl-2 pr-2" />}
+                {showStmtMatch && <td className="pl-2 pr-5" />}
               </tr>
             </thead>
 
             <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.id}
-                  className={`border-b border-slate-100 transition-colors ${
-                    reconcileMode && row.isCleared
-                      ? 'bg-teal-50/40 hover:bg-teal-50'
-                      : 'hover:bg-slate-50'
-                  }`}
-                >
-                  <td className="py-2.5 pl-5 pr-2 text-xs text-slate-600 whitespace-nowrap">
-                    {formatDate(row.date)}
-                  </td>
-                  <td className="px-2 py-2.5 text-xs text-slate-700 overflow-hidden max-w-0">
-                    <span className="block truncate" title={row.narration}>{row.narration}</span>
-                    {showCashBookBadge && (
-                      <span className={`mt-0.5 inline-flex rounded px-1.5 py-0 text-[10px] font-semibold leading-4 ${
-                        row.cashBookType === 'Aided'
-                          ? 'bg-teal-50 text-teal-600'
-                          : 'bg-orange-50 text-orange-600'
-                      }`}>
-                        {row.cashBookType === 'Aided' ? 'Aided' : 'Un-Aided'}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-2 py-2.5 text-xs text-slate-500 whitespace-nowrap">{row.chequeNo}</td>
-                  <td className="px-2 py-2.5 text-xs font-medium text-right whitespace-nowrap">
-                    {row.debit > 0
-                      ? <span className="text-green-700">{formatCurrency(row.debit)}</span>
-                      : <span className="text-slate-300">—</span>}
-                  </td>
-                  <td className="px-2 py-2.5 text-xs font-medium text-right whitespace-nowrap">
-                    {row.credit > 0
-                      ? <span className="text-red-700">{formatCurrency(row.credit)}</span>
-                      : <span className="text-slate-300">—</span>}
-                  </td>
-                  <td className={`pl-2 pr-2 py-2.5 text-xs font-semibold text-right whitespace-nowrap ${
-                    row.balance >= 0 ? 'text-slate-800' : 'text-orange-700'
-                  }`}>
-                    {formatCurrency(Math.abs(row.balance))}{row.balance < 0 ? ' Dr' : ''}
-                  </td>
-                  {reconcileMode && (
-                    <td className="pl-2 pr-5 py-2.5">
-                      <BankDateCell
-                        bankDate={row.bankDate}
-                        onSave={(date) => onSetBankDate(row.id, date)}
-                      />
+              {displayRows.map((row) => {
+                const stmtMatch = showStmtMatch ? stmtMatchMap.get(row.id) : undefined;
+                const isStmtMatched = !!stmtMatch;
+                return (
+                  <tr
+                    key={row.id}
+                    className={`border-b transition-colors ${
+                      showStmtMatch && !isStmtMatched
+                        ? 'border-amber-100 bg-amber-50/50 hover:bg-amber-50'
+                        : reconcileMode && row.isCleared
+                        ? 'border-slate-100 bg-teal-50/40 hover:bg-teal-50'
+                        : 'border-slate-100 hover:bg-slate-50'
+                    }`}
+                  >
+                    <td className="py-2.5 pl-5 pr-2 text-xs text-slate-600 whitespace-nowrap">
+                      {formatDate(row.date)}
                     </td>
-                  )}
-                </tr>
-              ))}
+                    <td className="px-2 py-2.5 text-xs text-slate-700 overflow-hidden max-w-0">
+                      <span className="block truncate" title={row.narration}>{row.narration}</span>
+                      {showCashBookBadge && (
+                        <span className={`mt-0.5 inline-flex rounded px-1.5 py-0 text-[10px] font-semibold leading-4 ${
+                          row.cashBookType === 'Aided'
+                            ? 'bg-teal-50 text-teal-600'
+                            : 'bg-orange-50 text-orange-600'
+                        }`}>
+                          {row.cashBookType === 'Aided' ? 'Aided' : 'Un-Aided'}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-2 py-2.5 text-xs text-slate-500 whitespace-nowrap">{row.chequeNo}</td>
+                    <td className="px-2 py-2.5 text-xs font-medium text-right whitespace-nowrap">
+                      {row.debit > 0
+                        ? <span className="text-green-700">{formatCurrency(row.debit)}</span>
+                        : <span className="text-slate-300">—</span>}
+                    </td>
+                    <td className="px-2 py-2.5 text-xs font-medium text-right whitespace-nowrap">
+                      {row.credit > 0
+                        ? <span className="text-red-700">{formatCurrency(row.credit)}</span>
+                        : <span className="text-slate-300">—</span>}
+                    </td>
+                    <td className={`pl-2 pr-2 py-2.5 text-xs font-semibold text-right whitespace-nowrap ${
+                      row.balance >= 0 ? 'text-slate-800' : 'text-orange-700'
+                    }`}>
+                      {formatCurrency(Math.abs(row.balance))}{row.balance < 0 ? ' Dr' : ''}
+                    </td>
+                    {reconcileMode && (
+                      <td className="pl-2 pr-2 py-2.5">
+                        <BankDateCell
+                          bankDate={row.bankDate}
+                          onSave={(date) => onSetBankDate(row.id, date)}
+                        />
+                      </td>
+                    )}
+                    {showStmtMatch && (
+                      <td className="pl-2 pr-5 py-2.5 text-xs whitespace-nowrap">
+                        {stmtMatch
+                          ? <div className="flex flex-col gap-0.5">
+                              <span className="font-medium text-violet-700">{formatDate(stmtMatch.date)}</span>
+                              <span className="text-[10px] text-slate-400 truncate max-w-[140px]" title={stmtMatch.narration}>
+                                {stmtMatch.narration || '—'}
+                              </span>
+                            </div>
+                          : <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                              Not in Statement
+                            </span>
+                        }
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
 
             <tfoot>
               {/* Totals row */}
               <tr className="border-t-2 border-slate-300 bg-slate-50">
                 <td colSpan={3} className="py-2.5 pl-5 pr-2 text-xs font-semibold text-slate-600 whitespace-nowrap">
-                  {rows.length} transaction{rows.length !== 1 ? 's' : ''}
+                  {displayRows.length} transaction{displayRows.length !== 1 ? 's' : ''}
+                  {showStmtMatch && stmtMatchFilter !== 'all' && (
+                    <span className="ml-1 text-slate-400 font-normal">
+                      (of {rows.length})
+                    </span>
+                  )}
                 </td>
                 <td className="px-2 py-2.5 text-xs font-bold text-right text-green-700 whitespace-nowrap">
                   {formatCurrency(totalDebit)}
@@ -581,7 +720,12 @@ function StatementTable({
                 }`}>
                   {formatCurrency(Math.abs(closingBalance))}{closingBalance < 0 ? ' Dr' : ''}
                 </td>
-                {reconcileMode && <td className="pl-2 pr-5" />}
+                {reconcileMode && <td className="pl-2 pr-2" />}
+                {showStmtMatch && (
+                  <td className="pl-2 pr-5 py-2.5 text-xs font-semibold text-violet-700 whitespace-nowrap">
+                    {stmtMatchedCount}/{rows.length} matched
+                  </td>
+                )}
               </tr>
             </tfoot>
           </table>

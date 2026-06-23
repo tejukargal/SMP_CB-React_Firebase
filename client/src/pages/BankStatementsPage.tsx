@@ -542,8 +542,8 @@ export function BankStatementsPage() {
 
   const { transactions, openingBalanceOverride, loading } = useBankStatements(fy, selectedKey);
 
-  // Load Cash Book entries for reconciliation (all types)
-  const { entries } = useEntries(fy, settings.activeCashBookType);
+  // Load Cash Book entries for reconciliation — always load all types
+  const { entries } = useEntries(fy, 'Both');
 
   // Bank entries = entries for this bank account only
   const bankHeads: Record<BankKey, string> = {
@@ -590,6 +590,20 @@ export function BankStatementsPage() {
     cbMatchMap.forEach(v => { if (v) n++; });
     return n;
   }, [cbMatchMap]);
+
+  const cbTypeBreakdown = useMemo(() => {
+    const counts: Record<string, number> = { 'Aided': 0, 'Un-Aided': 0, 'WP Un-Aided': 0 };
+    cbMatchMap.forEach(entry => { if (entry) counts[entry.cashBookType] = (counts[entry.cashBookType] ?? 0) + 1; });
+    return counts;
+  }, [cbMatchMap]);
+
+  // CB entries that have no matching bank transaction
+  const cbUnmatchedEntries = useMemo(() => {
+    if (!showCBMatch) return [];
+    const matchedIds = new Set<string>();
+    cbMatchMap.forEach(e => { if (e) matchedIds.add(e.id); });
+    return relevantEntries.filter(e => !matchedIds.has(e.id));
+  }, [showCBMatch, cbMatchMap, relevantEntries]);
 
   const displayTransactions = useMemo(() => {
     if (!showCBMatch || cbMatchFilter === 'all') return transactions;
@@ -866,12 +880,31 @@ export function BankStatementsPage() {
 
                 {/* CB match stats */}
                 {showCBMatch && (
-                  <div className="flex items-center gap-1.5 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1">
-                    <svg className="h-3 w-3 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="flex items-center gap-2 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1">
+                    <svg className="h-3 w-3 text-violet-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                         d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                     </svg>
                     <span className="text-violet-700 font-medium">{cbMatchedCount}/{transactions.length} CB matched</span>
+                    {cbMatchedCount > 0 && (
+                      <div className="flex items-center gap-1 border-l border-violet-200 pl-2">
+                        {cbTypeBreakdown['Aided'] > 0 && (
+                          <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-[9px] font-semibold text-green-700">
+                            Aided {cbTypeBreakdown['Aided']}
+                          </span>
+                        )}
+                        {cbTypeBreakdown['Un-Aided'] > 0 && (
+                          <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-semibold text-red-700">
+                            Un-Aided {cbTypeBreakdown['Un-Aided']}
+                          </span>
+                        )}
+                        {cbTypeBreakdown['WP Un-Aided'] > 0 && (
+                          <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] font-semibold text-blue-700">
+                            WP {cbTypeBreakdown['WP Un-Aided']}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -980,7 +1013,7 @@ export function BankStatementsPage() {
                           : 'bg-white text-slate-600 hover:bg-violet-50 hover:text-violet-700'
                       } ${i > 0 ? 'border-l border-violet-200' : ''}`}
                     >
-                      {f === 'all' ? 'All' : f === 'matched' ? 'Matched' : 'Not Matched'}
+                      {f === 'all' ? 'All' : f === 'matched' ? 'Matched' : 'Not in CB'}
                     </button>
                   ))}
                 </div>
@@ -994,21 +1027,23 @@ export function BankStatementsPage() {
               <colgroup>
                 <col className="w-[100px]"/>
                 <col/>
-                <col className="w-[110px]"/>
+                {!showCBMatch && <col className="w-[110px]"/>}
                 <col className="w-[130px]"/>
                 <col className="w-[130px]"/>
                 <col className="w-[130px]"/>
                 {reconcileMode && <col className="w-[160px]"/>}
-                {showCBMatch && <col className="w-[150px]"/>}
+                {showCBMatch && <col className="w-[160px]"/>}
                 {showCBMatch && <col className="w-[160px]"/>}
               </colgroup>
 
               <thead className="sticky top-[130px] z-[5]">
                 <tr className={`border-b border-${bank.color}-100 ${theadBg}`}>
-                  {['Date','Narration','Cheque / Ref','Debit (Dr)','Credit (Cr)','Balance'].map((h, i) => (
+                  {['Date','Narration','Cheque / Ref','Debit (Dr)','Credit (Cr)','Balance']
+                    .filter(h => !(showCBMatch && h === 'Cheque / Ref'))
+                    .map((h, i, arr) => (
                     <th key={h} className={`py-2 text-xs font-semibold text-slate-600 whitespace-nowrap ${
-                      i === 0 ? 'pl-5 pr-2' : i === 5 ? 'pl-2 pr-2' : 'px-2'
-                    } ${i >= 3 ? 'text-right' : ''}`}>{h}</th>
+                      i === 0 ? 'pl-5 pr-2' : i === arr.length - 1 ? 'pl-2 pr-2' : 'px-2'
+                    } ${i >= (showCBMatch ? 2 : 3) ? 'text-right' : ''}`}>{h}</th>
                   ))}
                   {reconcileMode && (
                     <th className="pl-2 pr-2 py-2 text-xs font-semibold text-teal-600 whitespace-nowrap">
@@ -1028,7 +1063,7 @@ export function BankStatementsPage() {
                   <td className="py-2 pl-5 pr-2 text-xs text-slate-500 whitespace-nowrap">
                     {openingDateLabel(fy)}
                   </td>
-                  <td colSpan={2} className="px-2 py-2 text-xs font-semibold text-slate-600">Opening Balance</td>
+                  <td colSpan={showCBMatch ? 1 : 2} className="px-2 py-2 text-xs font-semibold text-slate-600">Opening Balance</td>
                   <td className="px-2 py-2 text-xs font-semibold text-right text-slate-300">—</td>
                   <td className="px-2 py-2 text-xs font-semibold text-right text-blue-700">
                     {formatCurrency(openingBalance)}
@@ -1082,10 +1117,12 @@ export function BankStatementsPage() {
                   return (
                     <tr
                       key={txn.id}
-                      className={`border-b border-slate-100 transition-colors ${
-                        reconcileMode && isMatched
-                          ? 'bg-teal-50/40 hover:bg-teal-50'
-                          : 'hover:bg-slate-50'
+                      className={`border-b transition-colors ${
+                        showCBMatch && !cbMatchMap.get(txn.id)
+                          ? 'border-amber-100 bg-amber-50/50 hover:bg-amber-50'
+                          : reconcileMode && isMatched
+                          ? 'border-slate-100 bg-teal-50/40 hover:bg-teal-50'
+                          : 'border-slate-100 hover:bg-slate-50'
                       }`}
                     >
                       <td className="py-2.5 pl-5 pr-2 text-xs text-slate-600 whitespace-nowrap">
@@ -1094,9 +1131,11 @@ export function BankStatementsPage() {
                       <td className="px-2 py-2.5 text-xs text-slate-700 overflow-hidden max-w-0">
                         <span className="block truncate" title={txn.narration}>{txn.narration || '—'}</span>
                       </td>
-                      <td className="px-2 py-2.5 text-xs text-slate-500 whitespace-nowrap">
-                        {txn.chequeNo || '—'}
-                      </td>
+                      {!showCBMatch && (
+                        <td className="px-2 py-2.5 text-xs text-slate-500 whitespace-nowrap">
+                          {txn.chequeNo || '—'}
+                        </td>
+                      )}
                       <td className="px-2 py-2.5 text-xs font-medium text-right whitespace-nowrap">
                         {txn.debit > 0
                           ? <span className="text-green-700">{formatCurrency(txn.debit)}</span>
@@ -1157,12 +1196,22 @@ export function BankStatementsPage() {
 
                       {showCBMatch && (() => {
                         const cb = cbMatchMap.get(txn.id);
+                        const cbTypeBadge = cb ? (
+                          cb.cashBookType === 'Aided'
+                            ? <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-[9px] font-semibold text-green-700 shrink-0">Aided</span>
+                            : cb.cashBookType === 'Un-Aided'
+                            ? <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-semibold text-red-700 shrink-0">Un-Aided</span>
+                            : <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] font-semibold text-blue-700 shrink-0">WP Un-Aided</span>
+                        ) : null;
                         return (
                           <>
                             <td className="pl-2 pr-2 py-2.5 text-xs whitespace-nowrap">
                               {cb
-                                ? <span className="font-medium text-violet-700">{cb.headOfAccount}</span>
-                                : <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-400">Not Matched</span>
+                                ? <div className="flex items-center gap-1.5">
+                                    {cbTypeBadge}
+                                    <span className="font-medium text-violet-700 truncate">{cb.headOfAccount}</span>
+                                  </div>
+                                : <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">Not in CB</span>
                               }
                             </td>
                             <td className="pl-2 pr-5 py-2.5 text-xs text-slate-500 overflow-hidden max-w-0">
@@ -1176,11 +1225,51 @@ export function BankStatementsPage() {
                     </tr>
                   );
                 })}
+
+                {/* Cashbook entries not found in the bank statement */}
+                {showCBMatch && cbMatchFilter === 'all' && cbUnmatchedEntries.map(entry => {
+                  const typeBadge = entry.cashBookType === 'Aided'
+                    ? <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-[9px] font-semibold text-green-700 shrink-0">Aided</span>
+                    : entry.cashBookType === 'Un-Aided'
+                    ? <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-semibold text-red-700 shrink-0">Un-Aided</span>
+                    : <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] font-semibold text-blue-700 shrink-0">WP Un-Aided</span>;
+                  return (
+                    <tr key={`cb-only-${entry.id}`} className="border-b border-indigo-100 bg-indigo-50/50 hover:bg-indigo-50/80 transition-colors">
+                      <td className="py-2.5 pl-5 pr-2 text-xs text-slate-600 whitespace-nowrap">
+                        {formatDate(entry.date)}
+                      </td>
+                      <td className="px-2 py-2.5 text-xs text-slate-700 overflow-hidden max-w-0">
+                        <span className="block truncate" title={entry.headOfAccount}>{entry.headOfAccount}</span>
+                      </td>
+                      <td className="px-2 py-2.5 text-xs font-medium text-right whitespace-nowrap">
+                        {entry.type === 'Receipt'
+                          ? <span className="text-green-700">{formatCurrency(entry.amount)}</span>
+                          : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="px-2 py-2.5 text-xs font-medium text-right whitespace-nowrap">
+                        {entry.type === 'Payment'
+                          ? <span className="text-red-700">{formatCurrency(entry.amount)}</span>
+                          : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="pl-2 pr-2 py-2.5 text-xs text-slate-300 text-right">—</td>
+                      {reconcileMode && <td className="pl-2 pr-2" />}
+                      <td className="pl-2 pr-2 py-2.5 text-xs whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          {typeBadge}
+                          <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">Only in CB</span>
+                        </div>
+                      </td>
+                      <td className="pl-2 pr-5 py-2.5 text-xs text-slate-500 overflow-hidden max-w-0">
+                        <span className="block truncate" title={entry.notes || ''}>{entry.notes || '—'}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
 
               <tfoot>
                 <tr className="border-t-2 border-slate-300 bg-slate-50">
-                  <td colSpan={3} className="py-2.5 pl-5 pr-2 text-xs font-semibold text-slate-600 whitespace-nowrap">
+                  <td colSpan={showCBMatch ? 2 : 3} className="py-2.5 pl-5 pr-2 text-xs font-semibold text-slate-600 whitespace-nowrap">
                     {transactions.length} transaction{transactions.length !== 1 ? 's' : ''}
                   </td>
                   <td className="px-2 py-2.5 text-xs font-bold text-right text-green-700 whitespace-nowrap">

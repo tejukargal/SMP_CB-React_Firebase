@@ -565,25 +565,29 @@ export function exportLedgerExcel(
 // Title: 2 lines only — bank name/type on line 1, FY + balances + date on line 2
 // ─────────────────────────────────────────────────────────────────────────────
 export interface BankStatementExportParams {
-  bankLabel:      string;
-  financialYear:  string;
-  openingBalance: number;
-  openingDateStr: string;   // e.g. "01 Apr 2025"
+  bankLabel:       string;
+  financialYear:   string;
+  openingBalance:  number;
+  openingDateStr:  string;   // e.g. "01 Apr 2025"
   rows: Array<{
-    date:      string;
-    narration: string;
-    chequeNo:  string;
-    debit:     number;
-    credit:    number;
-    balance:   number;
+    date:       string;
+    narration:  string;
+    chequeNo:   string;
+    debit:      number;
+    credit:     number;
+    balance:    number;
+    stmtMatch?: { date: string; narration: string } | null;
   }>;
-  totalDebit:     number;
-  totalCredit:    number;
-  closingBalance: number;
+  totalDebit:      number;
+  totalCredit:     number;
+  closingBalance:  number;
+  showStmtMatch?:  boolean;
+  stmtMatchFilter?: 'all' | 'matched' | 'unmatched';
 }
 
 export function exportBankStatementPDF(p: BankStatementExportParams) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const hasStmt = !!p.showStmtMatch;
 
   // ── Two-line centred header ──
   doc.setFont('helvetica', 'bold');
@@ -594,19 +598,32 @@ export function exportBankStatementPDF(p: BankStatementExportParams) {
   doc.setFontSize(8);
   doc.setTextColor(100, 116, 139);
   const cbStr = `${fmtAmt(Math.abs(p.closingBalance))}${p.closingBalance < 0 ? ' Dr' : ''}`;
+  const filterLabel = hasStmt && p.stmtMatchFilter && p.stmtMatchFilter !== 'all'
+    ? `   |   Filter: ${p.stmtMatchFilter === 'matched' ? 'Matched to Statement' : 'Not in Statement'}`
+    : '';
   doc.text(
-    `FY: ${p.financialYear}   |   Opening Balance: ${fmtAmt(p.openingBalance)}   |   Closing Balance: ${cbStr}   |   Generated: ${new Date().toLocaleDateString('en-IN')}`,
+    `FY: ${p.financialYear}   |   Opening Balance: ${fmtAmt(p.openingBalance)}   |   Closing Balance: ${cbStr}${filterLabel}   |   Generated: ${new Date().toLocaleDateString('en-IN')}`,
     PAGE_CX, 17, { align: 'center' },
   );
   doc.setTextColor(0, 0, 0);
 
-  const C_OB_BG: RGB = [219, 234, 254]; // blue-100
-  const C_OB_FG: RGB = [30,  64,  175]; // blue-800
+  const C_OB_BG:   RGB = [219, 234, 254]; // blue-100
+  const C_OB_FG:   RGB = [30,  64,  175]; // blue-800
+  const C_MATCHED: RGB = [240, 253, 244]; // green-50
+  const C_UNMATCHED: RGB = [255, 251, 235]; // amber-50
+
+  const stmtLabel = (r: typeof p.rows[number]) => {
+    if (!hasStmt) return '';
+    if (r.stmtMatch === undefined) return '';
+    if (!r.stmtMatch) return 'Not in Statement';
+    const narr = r.stmtMatch.narration ? ` · ${r.stmtMatch.narration}` : '';
+    return `${formatDate(r.stmtMatch.date)}${narr}`;
+  };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const body: any[] = [
     // Opening balance row
-    [p.openingDateStr, 'Opening Balance', '', '—', fmtAmt(p.openingBalance), fmtAmt(p.openingBalance)],
+    [p.openingDateStr, 'Opening Balance', '', '—', fmtAmt(p.openingBalance), fmtAmt(p.openingBalance), ...(hasStmt ? [''] : [])],
     // Transaction rows
     ...p.rows.map(r => [
       formatDate(r.date),
@@ -615,10 +632,11 @@ export function exportBankStatementPDF(p: BankStatementExportParams) {
       r.debit  > 0 ? fmtAmt(r.debit)  : '—',
       r.credit > 0 ? fmtAmt(r.credit) : '—',
       `${fmtAmt(Math.abs(r.balance))}${r.balance < 0 ? ' Dr' : ''}`,
+      ...(hasStmt ? [stmtLabel(r)] : []),
     ]),
     // Totals row
     [`${p.rows.length} transaction${p.rows.length !== 1 ? 's' : ''}`, '', '',
-      fmtAmt(p.totalDebit), fmtAmt(p.totalCredit), cbStr],
+      fmtAmt(p.totalDebit), fmtAmt(p.totalCredit), cbStr, ...(hasStmt ? [''] : [])],
   ];
   const TOTAL_IDX = body.length - 1;
 
@@ -626,11 +644,22 @@ export function exportBankStatementPDF(p: BankStatementExportParams) {
     startY:     22,
     margin:     { left: MARGIN, right: MARGIN },
     tableWidth: 277,
-    head: [['Date', 'Narration', 'Cheque No', 'Debit\n(Receipt)', 'Credit\n(Payment)', 'Balance']],
+    head: [[
+      'Date', 'Narration', 'Cheque No', 'Debit\n(Receipt)', 'Credit\n(Payment)', 'Balance',
+      ...(hasStmt ? ['Stmt Match'] : []),
+    ]],
     body,
     styles:     BASE,
     headStyles: { ...HEAD_S, minCellHeight: 10 },
-    columnStyles: {
+    columnStyles: hasStmt ? {
+      0: { cellWidth: 22 },
+      1: { cellWidth: 95, overflow: 'ellipsize' as const },
+      2: { cellWidth: 22 },
+      3: { cellWidth: 30, halign: 'right' },
+      4: { cellWidth: 30, halign: 'right' },
+      5: { cellWidth: 30, halign: 'right' },
+      6: { cellWidth: 48, fontSize: 7, overflow: 'ellipsize' as const },
+    } : {
       0: { cellWidth: 22 },
       1: { cellWidth: 125, overflow: 'ellipsize' as const },
       2: { cellWidth: 28 },
@@ -649,6 +678,11 @@ export function exportBankStatementPDF(p: BankStatementExportParams) {
       } else if (idx === TOTAL_IDX) {
         data.cell.styles.fillColor = C_TOTAL;
         data.cell.styles.fontStyle = 'bold';
+      } else if (hasStmt && idx > 0 && idx < TOTAL_IDX) {
+        const row = p.rows[idx - 1];
+        if (row && 'stmtMatch' in row) {
+          data.cell.styles.fillColor = row.stmtMatch ? C_MATCHED : C_UNMATCHED;
+        }
       }
     },
   });
@@ -1069,14 +1103,29 @@ export function exportLedgerListExcel(
 }
 
 export function exportBankStatementExcel(p: BankStatementExportParams) {
+  const hasStmt = !!p.showStmtMatch;
   const cbStr = `${fmtAmt(Math.abs(p.closingBalance))}${p.closingBalance < 0 ? ' Dr' : ''}`;
+
+  const stmtLabel = (r: typeof p.rows[number]): string => {
+    if (!hasStmt || !('stmtMatch' in r)) return '';
+    if (!r.stmtMatch) return 'Not in Statement';
+    const narr = r.stmtMatch.narration ? ` · ${r.stmtMatch.narration}` : '';
+    return `${formatDate(r.stmtMatch.date)}${narr}`;
+  };
+
+  const filterLabel = hasStmt && p.stmtMatchFilter && p.stmtMatchFilter !== 'all'
+    ? `   |   Filter: ${p.stmtMatchFilter === 'matched' ? 'Matched to Statement' : 'Not in Statement'}`
+    : '';
+
+  const headers = ['Date', 'Narration', 'Cheque No', 'Debit (Receipt)', 'Credit (Payment)', 'Balance',
+    ...(hasStmt ? ['Stmt Match'] : [])];
 
   const wsData: (string | number)[][] = [
     [`${p.bankLabel} — Bank Statement`],
-    [`FY: ${p.financialYear}   |   Opening Balance: ${fmtAmt(p.openingBalance)}   |   Closing Balance: ${cbStr}   |   Generated: ${new Date().toLocaleDateString('en-IN')}`],
+    [`FY: ${p.financialYear}   |   Opening Balance: ${fmtAmt(p.openingBalance)}   |   Closing Balance: ${cbStr}${filterLabel}   |   Generated: ${new Date().toLocaleDateString('en-IN')}`],
     [],
-    ['Date', 'Narration', 'Cheque No', 'Debit (Receipt)', 'Credit (Payment)', 'Balance'],
-    [p.openingDateStr, 'Opening Balance', '', '', p.openingBalance, p.openingBalance],
+    headers,
+    [p.openingDateStr, 'Opening Balance', '', '', p.openingBalance, p.openingBalance, ...(hasStmt ? [''] : [])],
     ...p.rows.map(r => [
       formatDate(r.date),
       r.narration,
@@ -1084,10 +1133,11 @@ export function exportBankStatementExcel(p: BankStatementExportParams) {
       r.debit  > 0 ? r.debit  : '',
       r.credit > 0 ? r.credit : '',
       r.balance,
+      ...(hasStmt ? [stmtLabel(r)] : []),
     ]),
     [],
     [`${p.rows.length} transaction${p.rows.length !== 1 ? 's' : ''}`, '', '',
-      p.totalDebit, p.totalCredit, p.closingBalance],
+      p.totalDebit, p.totalCredit, p.closingBalance, ...(hasStmt ? [''] : [])],
   ];
 
   const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -1098,6 +1148,7 @@ export function exportBankStatementExcel(p: BankStatementExportParams) {
     { wch: 18 },  // Debit
     { wch: 18 },  // Credit
     { wch: 18 },  // Balance
+    ...(hasStmt ? [{ wch: 40 }] : []),  // Stmt Match
   ];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (ws as any)['!pageSetup'] = {
