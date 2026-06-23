@@ -13,7 +13,11 @@ import { formatCurrency } from '@/utils/formatCurrency';
 import { useEntries } from '@/hooks/useEntries';
 import { EntryRow } from '@/components/entries/EntryRow';
 import { EntrySkeleton } from '@/components/entries/EntrySkeleton';
+import { FeeEntrySection } from '@/components/settings/FeeEntrySection';
+import { SalaryEntrySection } from '@/components/settings/SalaryEntrySection';
 import type { Entry, EntryType, EntryFormData } from '@smp-cashbook/shared';
+
+type EntryMode = 'regular' | 'fee' | 'salary';
 
 // ── Autocomplete dropdown ──────────────────────────────────────────────────────
 
@@ -144,6 +148,7 @@ const RECENT_DATE_COUNT = 5;
 export function NewEntryPage() {
   const { settings } = useSettings();
   const { addToast } = useToast();
+  const [mode, setMode] = useState<EntryMode>('regular');
   const [form, setForm] = useState<EntryFormData>(EMPTY_FORM);
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
@@ -389,9 +394,69 @@ export function NewEntryPage() {
   const tabs: EntryType[] = ['Receipt', 'Payment'];
 
   return (
-    <div className="w-full pt-6 space-y-6" style={{ animation: 'page-enter 0.22s ease-out' }}>
+    <div className="w-full pt-4 space-y-4" style={{ animation: 'page-enter 0.22s ease-out' }}>
 
-      {/* ── Entry form ── */}
+      {/* ── Mode switcher ── */}
+      <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
+        <button
+          type="button"
+          onClick={() => setMode('regular')}
+          className={cn(
+            'flex items-center gap-2 flex-1 justify-center rounded-lg py-2 text-sm font-medium transition-all',
+            mode === 'regular'
+              ? 'bg-white text-slate-800 shadow-sm ring-1 ring-slate-200'
+              : 'text-slate-500 hover:text-slate-700'
+          )}
+        >
+          <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
+              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+          Regular Entry
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('fee')}
+          className={cn(
+            'flex items-center gap-2 flex-1 justify-center rounded-lg py-2 text-sm font-medium transition-all',
+            mode === 'fee'
+              ? 'bg-white text-teal-700 shadow-sm ring-1 ring-slate-200'
+              : 'text-slate-500 hover:text-slate-700'
+          )}
+        >
+          <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
+              d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
+          </svg>
+          Quick Fee Entry
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('salary')}
+          className={cn(
+            'flex items-center gap-2 flex-1 justify-center rounded-lg py-2 text-sm font-medium transition-all',
+            mode === 'salary'
+              ? 'bg-white text-green-700 shadow-sm ring-1 ring-slate-200'
+              : 'text-slate-500 hover:text-slate-700'
+          )}
+        >
+          <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
+              d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+          </svg>
+          Quick Salary Entry
+        </button>
+      </div>
+
+      {/* ── Quick Fee Entry ── */}
+      {mode === 'fee' && <FeeEntrySection />}
+
+      {/* ── Quick Salary Entry ── */}
+      {mode === 'salary' && <SalaryEntrySection />}
+
+      {/* ── Regular Entry form ── */}
+      {mode === 'regular' && <>
+
       <form ref={formRef} onSubmit={handleSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
 
         {/* Receipt / Payment toggle */}
@@ -635,6 +700,8 @@ export function NewEntryPage() {
         )}
 
       </div>
+
+      </> /* end regular entry */}
 
     </div>
   );
