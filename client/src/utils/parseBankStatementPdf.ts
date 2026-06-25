@@ -80,13 +80,15 @@ type ColKey = 'date' | 'valueDate' | 'narration' | 'chequeNo' | 'branchCode' | '
 
 const COL_KEYWORDS: { keys: string[]; col: ColKey }[] = [
   // 'value date' must come BEFORE 'date' — 'includes' would match 'date' inside 'value date'
-  { keys: ['value date', 'val date'], col: 'valueDate' },
+  // 'value' alone handles Canara Bank's two-line header where "VALUE DATE" is split across rows
+  { keys: ['value date', 'val date', 'value'], col: 'valueDate' },
   // 'branch code' / 'branch' must come BEFORE broad narration keywords
   { keys: ['branch code', 'branch', 'br code'], col: 'branchCode' },
-  { keys: ['txn date', 'date', 'tran date', 'trans date', 'posting date'], col: 'date' },
+  // 'trans' alone handles Canara Bank's split header where "TRANS DATE" appears on two lines
+  { keys: ['txn date', 'date', 'tran date', 'trans date', 'posting date', 'trans'], col: 'date' },
   { keys: ['description', 'narration', 'particulars', 'details', 'remarks'], col: 'narration' },
-  { keys: ['ref no', 'cheque no', 'chq no', 'cheque', 'reference', 'ref/chq no', 'ref no./cheque no'], col: 'chequeNo' },
-  { keys: ['debit', 'withdrawal', 'dr', 'withdrawal dr', 'debit(inr)'], col: 'debit' },
+  { keys: ['ref no', 'cheque no', 'chq no', 'cheque', 'reference', 'ref/chq no', 'ref/chq.no', 'ref no./cheque no'], col: 'chequeNo' },
+  { keys: ['debit', 'withdrawal', 'withdrawals', 'withdraws', 'dr', 'withdrawal dr', 'debit(inr)'], col: 'debit' },
   { keys: ['credit', 'deposit', 'cr', 'deposit cr', 'credit(inr)'], col: 'credit' },
   { keys: ['balance', 'closing balance', 'balance(inr)', 'running balance'], col: 'balance' },
 ];
@@ -160,9 +162,11 @@ function assignToken(tok: TextToken, cols: ColDef[]): ColKey {
 
 function isHeaderLine(line: Line): boolean {
   const text = line.tokens.map(t => t.str.toLowerCase()).join(' ');
-  const hasDate    = /\bdate\b/.test(text);
+  // '\btrans\b' (whole-word) handles Canara Bank's split header where Line A has "TRANS" without "DATE"
+  const hasDate    = /\bdate\b|\btrans\b/.test(text);
   const hasBalance = /\bbalance\b/.test(text);
-  const hasAmount  = /\bdebit\b|\bcredit\b|\bwithdrawal\b|\bdeposit\b/.test(text);
+  // '\bwithdraw' (no closing \b) matches withdrawal / withdrawals / withdraws (Canara Bank)
+  const hasAmount  = /\bdebit\b|\bcredit\b|\bwithdraw|\bdeposit\b/.test(text);
   return hasDate && hasBalance && hasAmount;
 }
 
@@ -253,7 +257,7 @@ export async function parseBankStatementPdfFallback(file: File): Promise<ParsedB
 
     // Try to find a date at the start of the line
     const dateMatch = line.match(
-      /^(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{2}-[A-Za-z]{3}-\d{4}|\d{2}\/[A-Za-z]{3}\/\d{4})/,
+      /^(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{2}-[A-Za-z]{3}-\d{2,4}|\d{2}\/[A-Za-z]{3}\/\d{2,4})/,
     );
     if (!dateMatch) continue;
     const date = parseDateToISO(dateMatch[1]);
