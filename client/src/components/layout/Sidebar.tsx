@@ -68,6 +68,26 @@ const navItems = [
     ),
   },
   {
+    to: '/pending-bills',
+    label: 'Pending Bills',
+    icon: (
+      <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M9 12h6m-3-3v6m-6 5h12a2 2 0 002-2V8.414a1 1 0 00-.293-.707l-3.414-3.414A1 1 0 0015.586 4H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    ),
+  },
+  {
+    to: '/pending-bills-list',
+    label: 'Pending Bills List',
+    icon: (
+      <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M4 6h16M4 10h16M4 14h10M4 18h6" />
+      </svg>
+    ),
+  },
+  {
     to: '/fee-register',
     label: 'Fee Register',
     icon: (
@@ -104,6 +124,8 @@ const FEATURES = [
   'Receipts & Payments',
   'By-Date View',
   'Ledger Accounts',
+  'Pending Bills',
+  'Pending Bills List',
   'Fee Register',
   'Salary Register',
   'Bank Accounts',

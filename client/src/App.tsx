@@ -10,6 +10,8 @@ import { FeeRegisterPage } from '@/pages/FeeRegisterPage';
 import { SalaryRegisterPage } from '@/pages/SalaryRegisterPage';
 import { BankAccountsPage } from '@/pages/BankAccountsPage';
 import { BankStatementsPage } from '@/pages/BankStatementsPage';
+import { PendingBillsPage } from '@/pages/PendingBillsPage';
+import { PendingBillsListPage } from '@/pages/PendingBillsListPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { Spinner } from '@/components/ui/Spinner';
@@ -53,6 +55,8 @@ export default function App() {
           <Route path="salary-register" element={<SalaryRegisterPage />} />
           <Route path="bank-accounts" element={<BankAccountsPage />} />
           <Route path="bank-statements" element={<BankStatementsPage />} />
+          <Route path="pending-bills" element={<PendingBillsPage />} />
+          <Route path="pending-bills-list" element={<PendingBillsListPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
