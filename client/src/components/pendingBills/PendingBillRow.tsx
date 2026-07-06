@@ -35,7 +35,6 @@ export const PendingBillRow = memo(function PendingBillRow({
     setToggling(true);
     try {
       await apiUpdatePendingBill(bill.id, bill.financialYear, bill.cashBookType, { status: 'Approved' });
-      addToast('Bill approved', 'success');
     } catch (err: unknown) {
       addToast(err instanceof Error ? err.message : 'Failed to approve bill', 'error');
     } finally {
@@ -48,7 +47,6 @@ export const PendingBillRow = memo(function PendingBillRow({
     setToggling(true);
     try {
       await apiUpdatePendingBill(bill.id, bill.financialYear, bill.cashBookType, { status: 'Pending' });
-      addToast('Bill reopened', 'success');
     } catch (err: unknown) {
       addToast(err instanceof Error ? err.message : 'Failed to reopen bill', 'error');
     } finally {
@@ -56,16 +54,21 @@ export const PendingBillRow = memo(function PendingBillRow({
     }
   };
 
+  const hasParticulars = !!bill.particulars;
+  const rowInteraction = {
+    onClick: selectMode ? () => onToggle?.(bill.id) : undefined,
+    onDoubleClick: !selectMode ? () => setDetailOpen(true) : undefined,
+  };
+  const rowBg = selectMode
+    ? selected ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-slate-50'
+    : 'hover:bg-slate-50';
+
   return (
     <>
       <tr
-        onClick={selectMode ? () => onToggle?.(bill.id) : undefined}
-        onDoubleClick={!selectMode ? () => setDetailOpen(true) : undefined}
-        className={`border-b border-slate-100 transition-colors cursor-pointer align-top
-          ${selectMode
-            ? selected ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-slate-50'
-            : 'hover:bg-slate-50'
-          }`}
+        {...rowInteraction}
+        className={`transition-colors cursor-pointer align-top
+          ${hasParticulars ? '' : 'border-b border-slate-100'} ${rowBg}`}
       >
         {selectMode && (
           <td className="pl-3 pr-1 py-3.5">
@@ -106,9 +109,6 @@ export const PendingBillRow = memo(function PendingBillRow({
         </td>
         <td className="px-2 py-3.5 text-xs text-slate-600 whitespace-nowrap overflow-hidden">
           {formatDate(bill.billDate)}
-        </td>
-        <td className="px-2 py-3.5 text-xs text-slate-400 truncate" title={bill.particulars || undefined}>
-          {bill.particulars || '—'}
         </td>
         <td className="px-2 py-3.5 whitespace-nowrap overflow-hidden">
           <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -168,6 +168,19 @@ export const PendingBillRow = memo(function PendingBillRow({
           </div>
         </td>
       </tr>
+
+      {hasParticulars && (
+        <tr
+          {...rowInteraction}
+          className={`border-b border-slate-100 transition-colors cursor-pointer ${rowBg}`}
+        >
+          {selectMode && <td />}
+          <td colSpan={6} />
+          <td colSpan={5} className="px-2 pb-2.5 pt-0 text-xs text-slate-400 truncate" title={bill.particulars}>
+            {bill.particulars}
+          </td>
+        </tr>
+      )}
 
       {detailOpen && (
         <PendingBillDetailModal bill={bill} onClose={() => setDetailOpen(false)} />

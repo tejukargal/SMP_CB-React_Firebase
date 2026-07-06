@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useClearedBillBatches } from '@/hooks/useClearedBillBatches';
+import { useToast } from '@/context/ToastContext';
+import { apiDeleteClearedBillBatch } from '@/api/clearedBillBatches';
 import { formatCurrency } from '@/utils/formatCurrency';
 import { formatDate } from '@/utils/formatDate';
-import type { PendingBill } from '@smp-cashbook/shared';
+import type { PendingBill, ClearedBillBatch } from '@smp-cashbook/shared';
 import type { ActiveCashBookType } from '@smp-cashbook/shared';
 
 interface ClearedBatchesModalProps {
@@ -12,10 +14,88 @@ interface ClearedBatchesModalProps {
   onClose: () => void;
 }
 
+function DeleteBatchConfirm({
+  batch,
+  onConfirm,
+  onCancel,
+  deleting,
+}: {
+  batch: ClearedBillBatch;
+  onConfirm: () => void;
+  onCancel: () => void;
+  deleting: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={!deleting ? onCancel : undefined} />
+      <div className="relative z-10 w-full max-w-sm rounded-xl border border-slate-200 bg-white shadow-xl">
+        <div className="flex items-start gap-3 px-5 pt-5 pb-4">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-100">
+            <svg className="h-4.5 w-4.5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-slate-800">
+              Delete batch from {formatDate(batch.date)}?
+            </h2>
+            <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+              This will remove the batch record and revert its{' '}
+              <span className="font-medium text-slate-700">
+                {batch.count} {batch.count === 1 ? 'bill' : 'bills'}
+              </span>{' '}
+              back to <span className="font-medium text-slate-700">Approved</span>. This action{' '}
+              <span className="font-medium text-red-600">cannot be undone</span>.
+            </p>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={deleting}
+            className="h-8 rounded-md border border-slate-200 bg-white px-4 text-xs font-medium
+              text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={deleting}
+            className="h-8 rounded-md bg-red-600 px-4 text-xs font-semibold text-white
+              hover:bg-red-700 active:bg-red-800 disabled:opacity-60 transition-colors"
+          >
+            {deleting ? 'Deleting…' : 'Delete batch'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ClearedBatchesModal({ bills, financialYear, cashBookType, onClose }: ClearedBatchesModalProps) {
   const { batches, loading, error } = useClearedBillBatches(financialYear, cashBookType);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [batchToDelete, setBatchToDelete] = useState<ClearedBillBatch | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const { addToast } = useToast();
   const billsById = new Map(bills.map((b) => [b.id, b]));
+
+  const handleDeleteBatch = async () => {
+    if (!batchToDelete) return;
+    setDeleting(true);
+    try {
+      await apiDeleteClearedBillBatch(batchToDelete.id, batchToDelete.financialYear, batchToDelete.cashBookType);
+      addToast('Cleared batch deleted', 'success');
+      setBatchToDelete(null);
+    } catch (err: unknown) {
+      addToast(err instanceof Error ? err.message : 'Failed to delete batch', 'error');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -49,12 +129,12 @@ export function ClearedBatchesModal({ bills, financialYear, cashBookType, onClos
                 const expanded = expandedId === batch.id;
                 return (
                   <div key={batch.id} className="rounded-lg border border-slate-200 overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => setExpandedId(expanded ? null : batch.id)}
-                      className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
+                    <div className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 transition-colors">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId(expanded ? null : batch.id)}
+                        className="flex flex-1 items-center gap-3 text-left"
+                      >
                         <svg className={`h-3.5 w-3.5 text-slate-400 transition-transform ${expanded ? 'rotate-90' : ''}`}
                           fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -63,9 +143,22 @@ export function ClearedBatchesModal({ bills, financialYear, cashBookType, onClos
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
                           {batch.count} {batch.count === 1 ? 'bill' : 'bills'}
                         </span>
+                      </button>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-bold text-green-700">{formatCurrency(batch.totalAmount)}</span>
+                        <button
+                          type="button"
+                          onClick={() => setBatchToDelete(batch)}
+                          title="Delete this batch"
+                          className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3M4 7h16" />
+                          </svg>
+                        </button>
                       </div>
-                      <span className="text-sm font-bold text-green-700">{formatCurrency(batch.totalAmount)}</span>
-                    </button>
+                    </div>
 
                     {expanded && (
                       <div className="border-t border-slate-100 bg-slate-50/60">
@@ -103,6 +196,15 @@ export function ClearedBatchesModal({ bills, financialYear, cashBookType, onClos
           )}
         </div>
       </div>
+
+      {batchToDelete && (
+        <DeleteBatchConfirm
+          batch={batchToDelete}
+          onConfirm={handleDeleteBatch}
+          onCancel={() => setBatchToDelete(null)}
+          deleting={deleting}
+        />
+      )}
     </div>
   );
 }

@@ -9,7 +9,6 @@ export interface PendingBillFilterState {
   bank: string;
   chqNoOrCash: string;
   headOfAccount: string;
-  firmName: string;
   status: 'All' | BillStatus;
 }
 
@@ -19,7 +18,6 @@ interface PendingBillFiltersProps {
   bankOptions: string[];
   chqNoOrCashOptions: string[];
   headOfAccountOptions: string[];
-  firmNameOptions: string[];
 }
 
 export const CLEAR_FILTERS: PendingBillFilterState = {
@@ -29,7 +27,6 @@ export const CLEAR_FILTERS: PendingBillFilterState = {
   bank: '',
   chqNoOrCash: '',
   headOfAccount: '',
-  firmName: '',
   status: 'Pending',
 };
 
@@ -54,7 +51,7 @@ const dateInvalidCls = `${dateBase} border-red-400 focus:border-red-400 focus:ri
 
 const selectTriggerCls = 'h-9 flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white shadow-sm px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 transition-colors whitespace-nowrap';
 
-export function PendingBillFilters({ filters, onChange, bankOptions, chqNoOrCashOptions, headOfAccountOptions, firmNameOptions }: PendingBillFiltersProps) {
+export function PendingBillFilters({ filters, onChange, bankOptions, chqNoOrCashOptions, headOfAccountOptions }: PendingBillFiltersProps) {
   const [, startTransition] = useTransition();
   const [searchInput, setSearchInput] = useState(filters.search);
   const [rawFrom, setRawFrom] = useState('');
@@ -101,7 +98,6 @@ export function PendingBillFilters({ filters, onChange, bankOptions, chqNoOrCash
     filters.bank ||
     filters.chqNoOrCash ||
     filters.headOfAccount ||
-    filters.firmName ||
     filters.status !== 'Pending';
 
   return (
@@ -170,15 +166,6 @@ export function PendingBillFilters({ filters, onChange, bankOptions, chqNoOrCash
         onChange={(v) => set('headOfAccount', v)}
         placeholder="All Accounts"
         options={[{ value: '', label: 'All Accounts' }, ...headOfAccountOptions.map((h) => ({ value: h, label: h }))]}
-        triggerCls={selectTriggerCls}
-      />
-
-      {/* ── Firm Name ────────────────────────────────────────────────────── */}
-      <SelectDropdown
-        value={filters.firmName}
-        onChange={(v) => set('firmName', v)}
-        placeholder="All Firms"
-        options={[{ value: '', label: 'All Firms' }, ...firmNameOptions.map((f) => ({ value: f, label: f }))]}
         triggerCls={selectTriggerCls}
       />
 

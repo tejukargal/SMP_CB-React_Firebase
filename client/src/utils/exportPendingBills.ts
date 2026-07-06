@@ -14,26 +14,24 @@ const fmtAmt = (n: number) => n.toFixed(2);
 
 // ── Colour palette ────────────────────────────────────────────────────────────
 type RGB = [number, number, number];
-const C_WHITE:    RGB = [255, 255, 255];
-const C_HEAD:     RGB = [100, 100, 100];
-const C_TOTAL:    RGB = [229, 231, 235];
-const C_CLEARED:  RGB = [220, 252, 231]; // light green tint
-const C_APPROVED: RGB = [219, 234, 254]; // light blue tint
-const C_BLACK:    RGB = [0, 0, 0];
+const C_WHITE: RGB = [255, 255, 255];
+const C_BLACK: RGB = [0, 0, 0];
 
+// Minimal style: horizontal rules only (top/bottom), no vertical borders
 const BASE = {
-  fontSize:      10,
-  cellPadding:   3,
+  fontSize:      9,
+  cellPadding:   2.5,
   lineColor:     C_BLACK,
-  lineWidth:     0.1,
-  minCellHeight: 12,
+  lineWidth:     { top: 0.1, bottom: 0.1, left: 0, right: 0 },
+  minCellHeight: 10,
 };
 const HEAD_S = {
-  fillColor: C_HEAD,
-  textColor: C_WHITE,
-  fontStyle: 'bold'   as const,
-  halign:    'center' as const,
-  fontSize:  10,
+  fillColor:  C_WHITE,
+  textColor:  C_BLACK,
+  fontStyle:  'bold'   as const,
+  halign:     'left'   as const,
+  fontSize:   9,
+  lineWidth:  { top: 0.1, bottom: 0.3, left: 0, right: 0 },
 };
 
 export interface PendingBillExportMeta {
@@ -64,7 +62,6 @@ function addHeader(doc: jsPDF, meta: PendingBillExportMeta): number {
   if (filters.bank) parts.push(`Bank: ${filters.bank}`);
   if (filters.chqNoOrCash) parts.push(`Chq/Cash: ${filters.chqNoOrCash}`);
   if (filters.headOfAccount) parts.push(`Head: ${filters.headOfAccount}`);
-  if (filters.firmName) parts.push(`Firm: ${filters.firmName}`);
   if (filters.search.trim()) parts.push(`Search: "${filters.search}"`);
   doc.text(parts.join('   ·   '), PAGE_CX, 20, { align: 'center' });
   doc.text(`Generated: ${new Date().toLocaleDateString('en-IN')}`, PAGE_W - MARGIN, 20, { align: 'right' });
@@ -74,7 +71,8 @@ function addHeader(doc: jsPDF, meta: PendingBillExportMeta): number {
 }
 
 const COLUMNS = ['Sl No', 'Date', 'Bank', 'Chq No/Cash', 'Amt', 'Head Of Acct', 'Firm Name', 'Bill No', 'Bill Date', 'Particulars', 'Status'];
-const PDF_COLUMNS = ['Sl No', 'Date', 'Bank', 'Chq No/Cash', 'Amt', 'Head Of Acct', 'Firm Name', 'Bill No', 'Bill Date', 'Particulars', 'Remarks'];
+// Firm Name column carries the particulars as a second, muted line under the firm name
+const PDF_COLUMNS = ['Sl No', 'Date', 'Bank', 'Chq No/Cash', 'Amt', 'Head Of Acct', 'Firm Name', 'Bill No', 'Bill Date', 'Remarks'];
 
 export function exportPendingBillsPDF(bills: PendingBill[], meta: PendingBillExportMeta) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -90,48 +88,42 @@ export function exportPendingBillsPDF(bills: PendingBill[], meta: PendingBillExp
     b.chqNoOrCash || '—',
     fmtAmt(b.amount),
     b.headOfAccount,
-    b.firmName,
+    b.particulars ? `${b.firmName}\n${b.particulars}` : b.firmName,
     b.billNumber,
     formatDate(b.billDate),
-    b.particulars || '',
     b.remarks || '—',
   ]);
 
   const total = sorted.reduce((s, b) => s + b.amount, 0);
-  body.push(['', '', '', 'Total:', fmtAmt(total), '', '', '', '', '', '']);
+  body.push(['', '', '', 'Total:', fmtAmt(total), '', '', '', '', '']);
 
   autoTable(doc, {
     startY,
     margin:     { left: MARGIN, right: MARGIN },
     tableWidth: 277,
+    theme:      'plain',
     head: [PDF_COLUMNS],
     body,
     styles:     BASE,
     headStyles: HEAD_S,
     columnStyles: {
-      0:  { cellWidth: 12, halign: 'center' },
-      1:  { cellWidth: 20 },
-      2:  { cellWidth: 26 },
-      3:  { cellWidth: 22 },
-      4:  { cellWidth: 22, halign: 'right' },
-      5:  { cellWidth: 32 },
-      6:  { cellWidth: 34 },
-      7:  { cellWidth: 26 },
-      8:  { cellWidth: 20 },
-      9:  { cellWidth: 43, fontSize: 7, cellPadding: { top: 1.5, bottom: 1.5, left: 2, right: 2 }, overflow: 'linebreak' as const },
-      10: { cellWidth: 20, fontSize: 7, cellPadding: { top: 1.5, bottom: 1.5, left: 2, right: 2 }, overflow: 'linebreak' as const },
+      0: { cellWidth: 12, halign: 'center' },
+      1: { cellWidth: 24, overflow: 'ellipsize' as const },
+      2: { cellWidth: 28 },
+      3: { cellWidth: 20 },
+      4: { cellWidth: 22, halign: 'right' },
+      5: { cellWidth: 30 },
+      6: { cellWidth: 65, overflow: 'linebreak' as const },
+      7: { cellWidth: 26 },
+      8: { cellWidth: 24, overflow: 'ellipsize' as const },
+      9: { cellWidth: 26, fontSize: 7 },
     },
     didParseCell: (data) => {
       if (data.section !== 'body') return;
       const row = body[data.row.index];
-      data.cell.styles.fillColor = C_WHITE;
       if (row[3] === 'Total:') {
-        data.cell.styles.fillColor = C_TOTAL;
         data.cell.styles.fontStyle = 'bold';
-      } else {
-        const bill = sorted[data.row.index];
-        if (bill?.status === 'Cleared') data.cell.styles.fillColor = C_CLEARED;
-        else if (bill?.status === 'Approved') data.cell.styles.fillColor = C_APPROVED;
+        data.cell.styles.lineWidth = { top: 0.3, bottom: 0.1, left: 0, right: 0 };
       }
     },
   });

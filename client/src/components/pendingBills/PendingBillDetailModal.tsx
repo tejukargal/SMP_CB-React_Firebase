@@ -146,7 +146,6 @@ export function PendingBillDetailModal({ bill, onClose }: { bill: PendingBill; o
     setTogglingStatus(true);
     try {
       await apiUpdatePendingBill(bill.id, bill.financialYear, bill.cashBookType, { status: 'Approved' });
-      addToast('Bill approved', 'success');
       onClose();
     } catch (err: unknown) {
       addToast(err instanceof Error ? err.message : 'Failed to approve bill', 'error');
@@ -159,7 +158,6 @@ export function PendingBillDetailModal({ bill, onClose }: { bill: PendingBill; o
     setTogglingStatus(true);
     try {
       await apiUpdatePendingBill(bill.id, bill.financialYear, bill.cashBookType, { status: 'Pending' });
-      addToast('Bill reopened', 'success');
       onClose();
     } catch (err: unknown) {
       addToast(err instanceof Error ? err.message : 'Failed to reopen bill', 'error');

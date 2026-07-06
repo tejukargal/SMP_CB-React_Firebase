@@ -131,7 +131,6 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
         const bill = bills.find((b) => b.id === id)!;
         return apiUpdatePendingBill(id, bill.financialYear, bill.cashBookType, { status: 'Approved' });
       }));
-      addToast(`${selectedPendingIds.length} ${selectedPendingIds.length === 1 ? 'bill' : 'bills'} approved`, 'success');
       setSelectedIds(new Set());
       setSelectMode(false);
     } catch (err) {
@@ -162,18 +161,12 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [bills]);
 
-  const firmNameOptions = useMemo(() => {
-    const set = new Set(bills.map((b) => b.firmName).filter(Boolean));
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [bills]);
-
   const filtered = useMemo(() => {
     let result = bills;
     if (filters.status !== 'All') result = result.filter((b) => b.status === filters.status);
     if (filters.bank) result = result.filter((b) => b.bank === filters.bank);
     if (filters.chqNoOrCash) result = result.filter((b) => b.chqNoOrCash === filters.chqNoOrCash);
     if (filters.headOfAccount) result = result.filter((b) => b.headOfAccount === filters.headOfAccount);
-    if (filters.firmName) result = result.filter((b) => b.firmName === filters.firmName);
     if (filters.dateFrom) result = result.filter((b) => b.billDate >= filters.dateFrom);
     if (filters.dateTo) result = result.filter((b) => b.billDate <= filters.dateTo);
     if (filters.search.trim()) {
@@ -229,7 +222,6 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
           bankOptions={bankOptions}
           chqNoOrCashOptions={chqNoOrCashOptions}
           headOfAccountOptions={headOfAccountOptions}
-          firmNameOptions={firmNameOptions}
         />
       </div>
 
@@ -415,7 +407,7 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
         </div>
       ) : (
         <div className="flex-1 min-h-0 rounded-lg border border-slate-200 overflow-auto">
-          <table className="w-full min-w-[1180px] text-left text-sm table-fixed">
+          <table className="w-full min-w-[1060px] text-left text-sm table-fixed">
             <colgroup>
               {selectMode && <col className="w-[36px]" />}
               <col className="w-[44px]" />
@@ -424,10 +416,9 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
               <col className="w-[90px]" />
               <col className="w-[100px]" />
               <col className="w-[130px]" />
-              <col className="w-[140px]" />
+              <col />
               <col className="w-[100px]" />
               <col className="w-[80px]" />
-              <col />
               <col className="w-[90px]" />
               <col className="w-[110px]" />
             </colgroup>
@@ -443,7 +434,6 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Firm Name</th>
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bill No</th>
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bill Date</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Particulars</th>
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Status</th>
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Actions</th>
               </tr>
@@ -469,7 +459,7 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
                 <td className="pl-2 pr-4 py-2.5 text-sm font-bold text-right whitespace-nowrap text-slate-800 bg-slate-50">
                   {formatCurrency(paginatedTotal)}
                 </td>
-                <td colSpan={7} className="bg-slate-50" />
+                <td colSpan={6} className="bg-slate-50" />
               </tr>
             </tfoot>
           </table>

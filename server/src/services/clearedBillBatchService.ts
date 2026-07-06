@@ -76,6 +76,35 @@ export async function createClearedBillBatch(
   };
 }
 
+export async function deleteClearedBillBatch(
+  financialYear: string,
+  cashBookType: string,
+  batchId: string
+): Promise<void> {
+  const batchCol = clearedBatchCollection(financialYear, cashBookType);
+  const batchRef = batchCol.doc(batchId);
+  const batchSnap = await batchRef.get();
+  if (!batchSnap.exists) return;
+
+  const billIds = (batchSnap.data()?.billIds as string[]) ?? [];
+  const billsCol = pendingBillCollection(financialYear, cashBookType);
+  const billRefs = billIds.map((id) => billsCol.doc(id));
+  const billSnaps = await Promise.all(billRefs.map((ref) => ref.get()));
+
+  const writeBatch = db.batch();
+  billSnaps.forEach((snap, i) => {
+    if (!snap.exists || snap.data()?.clearedBatchId !== batchId) return;
+    writeBatch.update(billRefs[i], {
+      status: 'Approved',
+      clearedAt: admin.firestore.FieldValue.delete(),
+      clearedBatchId: admin.firestore.FieldValue.delete(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+  writeBatch.delete(batchRef);
+  await writeBatch.commit();
+}
+
 export async function getClearedBillBatches(
   financialYear: string,
   cashBookType: string

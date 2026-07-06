@@ -60,12 +60,26 @@ function buildSuggestions(query: string, current: PendingBill[], prev: PendingBi
   return result;
 }
 
+/** Fields retained (and highlighted) across successive bill entries */
+type RetainedField = 'date' | 'bank' | 'chqNoOrCash';
+
 export function PendingBillForm() {
   const { settings } = useSettings();
   const { addToast } = useToast();
   const [form, setForm] = useState<PendingBillFormData>(EMPTY_FORM);
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
+  const [retained, setRetained] = useState<Set<RetainedField>>(new Set());
+
+  const highlightClass = 'border-amber-300 bg-amber-50 focus:border-amber-400 focus:ring-amber-400/20';
+  const retainedClass = (field: RetainedField) => (retained.has(field) ? highlightClass : undefined);
+  const clearRetained = (field: RetainedField) =>
+    setRetained((prev) => {
+      if (!prev.has(field)) return prev;
+      const next = new Set(prev);
+      next.delete(field);
+      return next;
+    });
 
   const { bills } = usePendingBills(settings.activeFinancialYear, settings.activeCashBookType);
 
@@ -104,7 +118,7 @@ export function PendingBillForm() {
   const firmSuggestions        = useMemo(() => buildSuggestions(form.firmName, bills, prevBills, 'firmName'), [form.firmName, bills, prevBills]);
   const particularsSuggestions = useMemo(() => buildSuggestions(form.particulars, bills, prevBills, 'particulars'), [form.particulars, bills, prevBills]);
 
-  const selectBank        = (v: string) => { set('bank', v); setBankOpen(false); };
+  const selectBank        = (v: string) => { set('bank', v); setBankOpen(false); clearRetained('bank'); };
   const selectHoa         = (v: string) => { set('headOfAccount', v); setHoaOpen(false); };
   const selectFirm        = (v: string) => { set('firmName', v); setFirmOpen(false); };
   const selectParticulars = (v: string) => { set('particulars', v); setParticularsOpen(false); };
@@ -134,7 +148,7 @@ export function PendingBillForm() {
       await apiCreatePendingBill({
         date: form.date,
         bank: form.bank ? toProperCase(form.bank.trim()) : '',
-        chqNoOrCash: form.chqNoOrCash.trim(),
+        chqNoOrCash: form.chqNoOrCash ? toProperCase(form.chqNoOrCash.trim()) : '',
         amount: Number(form.amount),
         headOfAccount: toProperCase(form.headOfAccount.trim()),
         firmName: toProperCase(form.firmName.trim()),
@@ -147,7 +161,8 @@ export function PendingBillForm() {
         cashBookType: settings.activeCashBookType,
       });
       addToast('Pending bill added successfully', 'success');
-      setForm(EMPTY_FORM);
+      setForm({ ...EMPTY_FORM, date: form.date, bank: form.bank, chqNoOrCash: form.chqNoOrCash });
+      setRetained(new Set<RetainedField>(['date', 'bank', 'chqNoOrCash']));
       setErrors({});
       setTimeout(() => { dateRef.current?.focus(); dateRef.current?.select(); }, 0);
     } catch (err: unknown) {
@@ -170,8 +185,9 @@ export function PendingBillForm() {
           label="Date"
           id="bill-date"
           value={form.date}
-          onChange={(iso) => set('date', iso)}
+          onChange={(iso) => { set('date', iso); clearRetained('date'); }}
           error={errors.date}
+          className={retainedClass('date')}
         />
         <div className="relative">
           <Input
@@ -180,7 +196,7 @@ export function PendingBillForm() {
             type="text"
             placeholder="E.g. Canara Bank"
             value={form.bank}
-            onChange={(e) => { set('bank', toProperCase(e.target.value)); setBankOpen(true); }}
+            onChange={(e) => { set('bank', toProperCase(e.target.value)); setBankOpen(true); clearRetained('bank'); }}
             onFocus={() => setBankOpen(true)}
             onBlur={() => setBankOpen(false)}
             onKeyDown={(e) => {
@@ -190,6 +206,7 @@ export function PendingBillForm() {
               }
             }}
             autoComplete="off"
+            className={retainedClass('bank')}
           />
           {bankOpen && <SuggestDropdown suggestions={bankSuggestions} onSelect={selectBank} />}
         </div>
@@ -199,8 +216,9 @@ export function PendingBillForm() {
           type="text"
           placeholder="E.g. Cash, Neft, 001234"
           value={form.chqNoOrCash}
-          onChange={(e) => set('chqNoOrCash', e.target.value)}
+          onChange={(e) => { set('chqNoOrCash', toProperCase(e.target.value)); clearRetained('chqNoOrCash'); }}
           autoComplete="off"
+          className={retainedClass('chqNoOrCash')}
         />
         <Input
           label="Amount (₹)"
@@ -317,7 +335,7 @@ export function PendingBillForm() {
           </Button>
           <button
             type="button"
-            onClick={() => { setForm(EMPTY_FORM); setErrors({}); }}
+            onClick={() => { setForm(EMPTY_FORM); setErrors({}); setRetained(new Set()); }}
             className="h-[28px] rounded-md border border-dashed border-slate-300 bg-white px-4 text-xs font-medium text-slate-400 hover:border-slate-400 hover:text-slate-600 transition-colors"
           >
             Reset

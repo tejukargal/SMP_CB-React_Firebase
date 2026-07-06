@@ -12,3 +12,7 @@ export async function apiGetClearedBillBatches(fy: string, type: string): Promis
   });
   return res.data.data;
 }
+
+export async function apiDeleteClearedBillBatch(id: string, fy: string, type: string): Promise<void> {
+  await apiClient.delete(`/api/cleared-batches/${id}`, { params: { fy, type } });
+}

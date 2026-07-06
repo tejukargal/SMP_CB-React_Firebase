@@ -31,7 +31,6 @@ export function ClearBillsModal({ billIds, totalAmount, financialYear, cashBookT
     setSaving(true);
     try {
       await apiCreateClearedBillBatch({ billIds, date, financialYear, cashBookType });
-      addToast(`${count} ${count === 1 ? 'bill' : 'bills'} marked as cleared`, 'success');
       onCleared();
     } catch (err: unknown) {
       addToast(err instanceof Error ? err.message : 'Failed to clear bills', 'error');
