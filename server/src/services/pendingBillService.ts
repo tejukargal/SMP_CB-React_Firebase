@@ -30,6 +30,7 @@ export async function createPendingBill(payload: CreatePendingBillPayload): Prom
     billNumber: payload.billNumber,
     billDate: payload.billDate,
     particulars: payload.particulars ?? '',
+    remarks: payload.remarks ?? '',
     status: payload.status,
     financialYear: payload.financialYear,
     cashBookType: payload.cashBookType,
@@ -57,11 +58,14 @@ export async function getPendingBills(
       billNumber: data.billNumber,
       billDate: data.billDate,
       particulars: data.particulars ?? '',
+      remarks: data.remarks ?? '',
       status: data.status ?? 'Pending',
       financialYear: data.financialYear,
       cashBookType: data.cashBookType,
       createdAt: data.createdAt?.toDate().toISOString() ?? '',
+      approvedAt: data.approvedAt as string | undefined,
       clearedAt: data.clearedAt as string | undefined,
+      clearedBatchId: data.clearedBatchId as string | undefined,
     };
   });
 }
@@ -76,6 +80,7 @@ export interface UpdatePendingBillFields {
   billNumber?: string;
   billDate?: string;
   particulars?: string;
+  remarks?: string;
   status?: string;
 }
 
@@ -89,10 +94,14 @@ export async function updatePendingBill(
   const ref = col.doc(billId);
 
   const updatePayload: Record<string, unknown> = { ...fields, updatedAt: admin.firestore.FieldValue.serverTimestamp() };
-  if (fields.status === 'Cleared') {
+  if (fields.status === 'Approved') {
+    updatePayload['approvedAt'] = new Date().toISOString();
+  } else if (fields.status === 'Cleared') {
     updatePayload['clearedAt'] = new Date().toISOString();
   } else if (fields.status === 'Pending') {
+    updatePayload['approvedAt'] = admin.firestore.FieldValue.delete();
     updatePayload['clearedAt'] = admin.firestore.FieldValue.delete();
+    updatePayload['clearedBatchId'] = admin.firestore.FieldValue.delete();
   }
 
   const [snap] = await Promise.all([
@@ -100,9 +109,15 @@ export async function updatePendingBill(
     ref.update(updatePayload),
   ]);
   const data = snap.data()!;
+  const resolvedApprovedAt = fields.status === 'Pending'
+    ? undefined
+    : (fields.status === 'Approved' ? (updatePayload['approvedAt'] as string) : (data.approvedAt as string | undefined));
   const resolvedClearedAt = fields.status === 'Pending'
     ? undefined
     : (fields.status === 'Cleared' ? (updatePayload['clearedAt'] as string) : (data.clearedAt as string | undefined));
+  const resolvedClearedBatchId = fields.status === 'Pending'
+    ? undefined
+    : (data.clearedBatchId as string | undefined);
 
   return {
     id: billId,
@@ -115,11 +130,14 @@ export async function updatePendingBill(
     billNumber: (fields.billNumber ?? data.billNumber) as string,
     billDate: (fields.billDate ?? data.billDate) as string,
     particulars: (fields.particulars ?? data.particulars ?? '') as string,
+    remarks: (fields.remarks ?? data.remarks ?? '') as string,
     status: (fields.status ?? data.status ?? 'Pending') as PendingBill['status'],
     financialYear: data.financialYear as string,
     cashBookType: data.cashBookType as PendingBill['cashBookType'],
     createdAt: data.createdAt?.toDate().toISOString() ?? '',
+    approvedAt: resolvedApprovedAt,
     clearedAt: resolvedClearedAt,
+    clearedBatchId: resolvedClearedBatchId,
   };
 }
 

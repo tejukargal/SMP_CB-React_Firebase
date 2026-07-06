@@ -14,25 +14,26 @@ const fmtAmt = (n: number) => n.toFixed(2);
 
 // ── Colour palette ────────────────────────────────────────────────────────────
 type RGB = [number, number, number];
-const C_WHITE:   RGB = [255, 255, 255];
-const C_HEAD:    RGB = [100, 100, 100];
-const C_TOTAL:   RGB = [229, 231, 235];
-const C_CLEARED: RGB = [220, 252, 231]; // light green tint
-const C_BLACK:   RGB = [0, 0, 0];
+const C_WHITE:    RGB = [255, 255, 255];
+const C_HEAD:     RGB = [100, 100, 100];
+const C_TOTAL:    RGB = [229, 231, 235];
+const C_CLEARED:  RGB = [220, 252, 231]; // light green tint
+const C_APPROVED: RGB = [219, 234, 254]; // light blue tint
+const C_BLACK:    RGB = [0, 0, 0];
 
 const BASE = {
-  fontSize:      8,
-  cellPadding:   2.5,
+  fontSize:      10,
+  cellPadding:   3,
   lineColor:     C_BLACK,
   lineWidth:     0.1,
-  minCellHeight: 8,
+  minCellHeight: 12,
 };
 const HEAD_S = {
   fillColor: C_HEAD,
   textColor: C_WHITE,
   fontStyle: 'bold'   as const,
   halign:    'center' as const,
-  fontSize:  9,
+  fontSize:  10,
 };
 
 export interface PendingBillExportMeta {
@@ -44,13 +45,15 @@ export interface PendingBillExportMeta {
 function addHeader(doc: jsPDF, meta: PendingBillExportMeta): number {
   const { financialYear, cashBookType, filters } = meta;
 
+  const title = 'Pending Bills Report';
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
-  doc.text('Pending Bills Report', PAGE_CX, 13, { align: 'center' });
+  doc.text(title, MARGIN, 13, { align: 'left' });
+  const titleWidth = doc.getTextWidth(title);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text(`SMP Cash Book  ·  ${cashBookType}`, PAGE_CX, 20, { align: 'center' });
+  doc.text(`  —  SMP Cash Book  ·  ${cashBookType}`, MARGIN + titleWidth, 13, { align: 'left' });
 
   doc.setFontSize(8);
   doc.setTextColor(100, 116, 139);
@@ -59,17 +62,19 @@ function addHeader(doc: jsPDF, meta: PendingBillExportMeta): number {
     parts.push(`Bill Date: ${filters.dateFrom ? formatDate(filters.dateFrom) : '—'} – ${filters.dateTo ? formatDate(filters.dateTo) : '—'}`);
   if (filters.status !== 'All') parts.push(`Status: ${filters.status}`);
   if (filters.bank) parts.push(`Bank: ${filters.bank}`);
+  if (filters.chqNoOrCash) parts.push(`Chq/Cash: ${filters.chqNoOrCash}`);
   if (filters.headOfAccount) parts.push(`Head: ${filters.headOfAccount}`);
   if (filters.firmName) parts.push(`Firm: ${filters.firmName}`);
   if (filters.search.trim()) parts.push(`Search: "${filters.search}"`);
-  doc.text(parts.join('   ·   '), PAGE_CX, 26, { align: 'center' });
-  doc.text(`Generated: ${new Date().toLocaleDateString('en-IN')}`, PAGE_W - MARGIN, 26, { align: 'right' });
+  doc.text(parts.join('   ·   '), PAGE_CX, 20, { align: 'center' });
+  doc.text(`Generated: ${new Date().toLocaleDateString('en-IN')}`, PAGE_W - MARGIN, 20, { align: 'right' });
   doc.setTextColor(0, 0, 0);
 
-  return 32;
+  return 26;
 }
 
 const COLUMNS = ['Sl No', 'Date', 'Bank', 'Chq No/Cash', 'Amt', 'Head Of Acct', 'Firm Name', 'Bill No', 'Bill Date', 'Particulars', 'Status'];
+const PDF_COLUMNS = ['Sl No', 'Date', 'Bank', 'Chq No/Cash', 'Amt', 'Head Of Acct', 'Firm Name', 'Bill No', 'Bill Date', 'Particulars', 'Remarks'];
 
 export function exportPendingBillsPDF(bills: PendingBill[], meta: PendingBillExportMeta) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -89,7 +94,7 @@ export function exportPendingBillsPDF(bills: PendingBill[], meta: PendingBillExp
     b.billNumber,
     formatDate(b.billDate),
     b.particulars || '',
-    b.status,
+    b.remarks || '—',
   ]);
 
   const total = sorted.reduce((s, b) => s + b.amount, 0);
@@ -99,7 +104,7 @@ export function exportPendingBillsPDF(bills: PendingBill[], meta: PendingBillExp
     startY,
     margin:     { left: MARGIN, right: MARGIN },
     tableWidth: 277,
-    head: [COLUMNS],
+    head: [PDF_COLUMNS],
     body,
     styles:     BASE,
     headStyles: HEAD_S,
@@ -113,8 +118,8 @@ export function exportPendingBillsPDF(bills: PendingBill[], meta: PendingBillExp
       6:  { cellWidth: 34 },
       7:  { cellWidth: 26 },
       8:  { cellWidth: 20 },
-      9:  { cellWidth: 43, fontSize: 6, cellPadding: { top: 1, bottom: 1, left: 2, right: 2 }, overflow: 'linebreak' as const },
-      10: { cellWidth: 20, halign: 'center' },
+      9:  { cellWidth: 43, fontSize: 7, cellPadding: { top: 1.5, bottom: 1.5, left: 2, right: 2 }, overflow: 'linebreak' as const },
+      10: { cellWidth: 20, fontSize: 7, cellPadding: { top: 1.5, bottom: 1.5, left: 2, right: 2 }, overflow: 'linebreak' as const },
     },
     didParseCell: (data) => {
       if (data.section !== 'body') return;
@@ -123,8 +128,10 @@ export function exportPendingBillsPDF(bills: PendingBill[], meta: PendingBillExp
       if (row[3] === 'Total:') {
         data.cell.styles.fillColor = C_TOTAL;
         data.cell.styles.fontStyle = 'bold';
-      } else if (row[10] === 'Cleared') {
-        data.cell.styles.fillColor = C_CLEARED;
+      } else {
+        const bill = sorted[data.row.index];
+        if (bill?.status === 'Cleared') data.cell.styles.fillColor = C_CLEARED;
+        else if (bill?.status === 'Approved') data.cell.styles.fillColor = C_APPROVED;
       }
     },
   });

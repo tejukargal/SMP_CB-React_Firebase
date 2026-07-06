@@ -11,9 +11,13 @@ export function PendingBillsPage() {
   );
 
   return (
-    <div className="w-full pt-4 pb-6 space-y-4" style={{ animation: 'page-enter 0.22s ease-out' }}>
-      <PendingBillForm />
-      <RecentPendingBills bills={bills} loading={loading} />
+    <div className="w-full h-full pt-4 pb-2 flex flex-col gap-4" style={{ animation: 'page-enter 0.22s ease-out' }}>
+      <div className="shrink-0">
+        <PendingBillForm />
+      </div>
+      <div className="flex-1 min-h-0">
+        <RecentPendingBills bills={bills} loading={loading} />
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useToast } from '@/context/ToastContext';
 import { apiDeletePendingBill, apiUpdatePendingBill } from '@/api/pendingBills';
+import { ClearBillsModal } from './ClearBillsModal';
 import { formatCurrency } from '@/utils/formatCurrency';
 import { formatDate } from '@/utils/formatDate';
 import { toProperCase } from '@smp-cashbook/shared';
@@ -41,6 +42,7 @@ function toForm(bill: PendingBill): PendingBillFormData {
     billNumber: bill.billNumber,
     billDate: bill.billDate,
     particulars: bill.particulars,
+    remarks: bill.remarks,
   };
 }
 
@@ -55,6 +57,7 @@ export function PendingBillDetailModal({ bill, onClose }: { bill: PendingBill; o
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [togglingStatus, setTogglingStatus] = useState(false);
+  const [clearModalOpen, setClearModalOpen] = useState(false);
 
   const [bankOpen, setBankOpen] = useState(false);
   const [hoaOpen, setHoaOpen] = useState(false);
@@ -114,6 +117,7 @@ export function PendingBillDetailModal({ bill, onClose }: { bill: PendingBill; o
         billNumber: form.billNumber.trim(),
         billDate: form.billDate,
         particulars: form.particulars ? toProperCase(form.particulars.trim()) : '',
+        remarks: form.remarks.trim(),
       });
       addToast('Pending bill updated successfully', 'success');
       setEditing(false);
@@ -138,15 +142,27 @@ export function PendingBillDetailModal({ bill, onClose }: { bill: PendingBill; o
     }
   };
 
-  const handleToggleStatus = async () => {
+  const handleApprove = async () => {
     setTogglingStatus(true);
     try {
-      const nextStatus = bill.status === 'Pending' ? 'Cleared' : 'Pending';
-      await apiUpdatePendingBill(bill.id, bill.financialYear, bill.cashBookType, { status: nextStatus });
-      addToast(nextStatus === 'Cleared' ? 'Bill marked as cleared' : 'Bill reopened', 'success');
+      await apiUpdatePendingBill(bill.id, bill.financialYear, bill.cashBookType, { status: 'Approved' });
+      addToast('Bill approved', 'success');
       onClose();
     } catch (err: unknown) {
-      addToast(err instanceof Error ? err.message : 'Failed to update status', 'error');
+      addToast(err instanceof Error ? err.message : 'Failed to approve bill', 'error');
+    } finally {
+      setTogglingStatus(false);
+    }
+  };
+
+  const handleReopen = async () => {
+    setTogglingStatus(true);
+    try {
+      await apiUpdatePendingBill(bill.id, bill.financialYear, bill.cashBookType, { status: 'Pending' });
+      addToast('Bill reopened', 'success');
+      onClose();
+    } catch (err: unknown) {
+      addToast(err instanceof Error ? err.message : 'Failed to reopen bill', 'error');
     } finally {
       setTogglingStatus(false);
     }
@@ -169,7 +185,9 @@ export function PendingBillDetailModal({ bill, onClose }: { bill: PendingBill; o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing]);
 
-  const isCleared = bill.status === 'Cleared';
+  const isPending  = bill.status === 'Pending';
+  const isApproved = bill.status === 'Approved';
+  const isCleared  = bill.status === 'Cleared';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -182,11 +200,15 @@ export function PendingBillDetailModal({ bill, onClose }: { bill: PendingBill; o
 
         {/* Header */}
         <div className={`flex items-center justify-between rounded-t-xl px-5 py-4 ${
-          isCleared ? 'bg-green-50 border-b border-green-100' : 'bg-amber-50 border-b border-amber-100'
+          isCleared ? 'bg-green-50 border-b border-green-100'
+            : isApproved ? 'bg-blue-50 border-b border-blue-100'
+            : 'bg-amber-50 border-b border-amber-100'
         }`}>
           <div className="flex items-center gap-2.5">
             <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
-              isCleared ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+              isCleared ? 'bg-green-100 text-green-700'
+                : isApproved ? 'bg-blue-100 text-blue-700'
+                : 'bg-amber-100 text-amber-700'
             }`}>
               {bill.status}
             </span>
@@ -373,6 +395,13 @@ export function PendingBillDetailModal({ bill, onClose }: { bill: PendingBill; o
                   />
                   {particularsOpen && <SuggestDropdown suggestions={particularsSuggestions} onSelect={(v) => { setField('particulars', v); setParticularsOpen(false); }} />}
                 </div>
+
+                <Textarea
+                  label="Remarks"
+                  id="edit-bill-remarks"
+                  value={form.remarks}
+                  onChange={(e) => setField('remarks', e.target.value)}
+                />
               </div>
             </div>
           ) : (
@@ -392,6 +421,12 @@ export function PendingBillDetailModal({ bill, onClose }: { bill: PendingBill; o
                   <div className="col-span-2">
                     <span className="text-xs text-slate-400">Particulars</span>
                     <p className="mt-0.5 text-sm text-slate-700 leading-relaxed">{bill.particulars}</p>
+                  </div>
+                )}
+                {bill.remarks && (
+                  <div className="col-span-2">
+                    <span className="text-xs text-slate-400">Remarks</span>
+                    <p className="mt-0.5 text-sm text-slate-700 leading-relaxed">{bill.remarks}</p>
                   </div>
                 )}
               </div>
@@ -461,14 +496,26 @@ export function PendingBillDetailModal({ bill, onClose }: { bill: PendingBill; o
                 </div>
               )}
               <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant={isCleared ? 'secondary' : 'primary'}
-                  onClick={handleToggleStatus}
-                  loading={togglingStatus}
-                >
-                  {isCleared ? 'Reopen' : 'Mark Cleared'}
-                </Button>
+                {isPending && (
+                  <Button size="sm" variant="primary" onClick={handleApprove} loading={togglingStatus}>
+                    Approve
+                  </Button>
+                )}
+                {isApproved && (
+                  <>
+                    <Button size="sm" variant="secondary" onClick={handleReopen} loading={togglingStatus}>
+                      Revert
+                    </Button>
+                    <Button size="sm" variant="primary" onClick={() => setClearModalOpen(true)}>
+                      Mark Cleared
+                    </Button>
+                  </>
+                )}
+                {isCleared && (
+                  <Button size="sm" variant="secondary" onClick={handleReopen} loading={togglingStatus}>
+                    Reopen
+                  </Button>
+                )}
                 <Button size="sm" variant="secondary" onClick={() => { setEditing(true); setConfirmDelete(false); }}>
                   Edit
                 </Button>
@@ -480,6 +527,16 @@ export function PendingBillDetailModal({ bill, onClose }: { bill: PendingBill; o
           )}
         </div>
       </div>
+      {clearModalOpen && (
+        <ClearBillsModal
+          billIds={[bill.id]}
+          totalAmount={bill.amount}
+          financialYear={bill.financialYear}
+          cashBookType={bill.cashBookType}
+          onClose={() => setClearModalOpen(false)}
+          onCleared={() => { setClearModalOpen(false); onClose(); }}
+        />
+      )}
     </div>
   );
 }

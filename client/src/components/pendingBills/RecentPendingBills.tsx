@@ -15,8 +15,8 @@ export function RecentPendingBills({ bills, loading }: { bills: PendingBill[]; l
   );
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
+    <div className="flex flex-col gap-2 h-full min-h-0">
+      <div className="shrink-0 flex items-center gap-2">
         <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
             d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -36,15 +36,15 @@ export function RecentPendingBills({ bills, loading }: { bills: PendingBill[]; l
       </div>
 
       {loading ? (
-        <div className="rounded-lg border border-slate-200 p-3">
+        <div className="flex-1 min-h-0 rounded-lg border border-slate-200 p-3 overflow-y-auto">
           <EntrySkeleton rows={RECENT_COUNT} />
         </div>
       ) : recent.length === 0 ? (
-        <div className="rounded-lg border border-slate-200 py-16 text-center text-sm text-slate-400">
+        <div className="flex-1 min-h-0 flex items-center justify-center rounded-lg border border-slate-200 text-center text-sm text-slate-400">
           No pending bills yet — add your first one above.
         </div>
       ) : (
-        <div className="rounded-lg border border-slate-200 overflow-x-auto">
+        <div className="flex-1 min-h-0 rounded-lg border border-slate-200 overflow-auto">
           <table className="w-full min-w-[1180px] text-left text-sm table-fixed">
             <colgroup>
               <col className="w-[44px]" />
@@ -60,20 +60,20 @@ export function RecentPendingBills({ bills, loading }: { bills: PendingBill[]; l
               <col className="w-[90px]" />
               <col className="w-[110px]" />
             </colgroup>
-            <thead>
-              <tr className="border-b border-slate-100 bg-white">
-                <th className="py-2.5 pl-4 pr-1 text-xs font-medium text-slate-500 whitespace-nowrap">Sl No</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap">Date</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap">Bank</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap">Chq No/Cash</th>
-                <th className="pl-2 pr-4 py-2.5 text-xs font-medium text-slate-500 text-right whitespace-nowrap">Amt</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap">Head Of Acct</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap">Firm Name</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap">Bill No</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap">Bill Date</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap">Particulars</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap">Status</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap">Actions</th>
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b border-slate-200 bg-white shadow-sm">
+                <th className="py-2.5 pl-4 pr-1 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Sl No</th>
+                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Date</th>
+                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bank</th>
+                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Chq No/Cash</th>
+                <th className="pl-2 pr-4 py-2.5 text-xs font-medium text-slate-500 text-right whitespace-nowrap bg-white">Amt</th>
+                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Head Of Acct</th>
+                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Firm Name</th>
+                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bill No</th>
+                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bill Date</th>
+                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Particulars</th>
+                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Status</th>
+                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Actions</th>
               </tr>
             </thead>
             <tbody>

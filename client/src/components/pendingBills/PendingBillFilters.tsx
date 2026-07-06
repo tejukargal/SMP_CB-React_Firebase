@@ -7,6 +7,7 @@ export interface PendingBillFilterState {
   dateFrom: string;
   dateTo: string;
   bank: string;
+  chqNoOrCash: string;
   headOfAccount: string;
   firmName: string;
   status: 'All' | BillStatus;
@@ -16,6 +17,7 @@ interface PendingBillFiltersProps {
   filters: PendingBillFilterState;
   onChange: (filters: PendingBillFilterState) => void;
   bankOptions: string[];
+  chqNoOrCashOptions: string[];
   headOfAccountOptions: string[];
   firmNameOptions: string[];
 }
@@ -25,6 +27,7 @@ export const CLEAR_FILTERS: PendingBillFilterState = {
   dateFrom: '',
   dateTo: '',
   bank: '',
+  chqNoOrCash: '',
   headOfAccount: '',
   firmName: '',
   status: 'Pending',
@@ -51,7 +54,7 @@ const dateInvalidCls = `${dateBase} border-red-400 focus:border-red-400 focus:ri
 
 const selectTriggerCls = 'h-9 flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white shadow-sm px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 transition-colors whitespace-nowrap';
 
-export function PendingBillFilters({ filters, onChange, bankOptions, headOfAccountOptions, firmNameOptions }: PendingBillFiltersProps) {
+export function PendingBillFilters({ filters, onChange, bankOptions, chqNoOrCashOptions, headOfAccountOptions, firmNameOptions }: PendingBillFiltersProps) {
   const [, startTransition] = useTransition();
   const [searchInput, setSearchInput] = useState(filters.search);
   const [rawFrom, setRawFrom] = useState('');
@@ -96,6 +99,7 @@ export function PendingBillFilters({ filters, onChange, bankOptions, headOfAccou
     rawFrom.trim() ||
     rawTo.trim() ||
     filters.bank ||
+    filters.chqNoOrCash ||
     filters.headOfAccount ||
     filters.firmName ||
     filters.status !== 'Pending';
@@ -151,6 +155,15 @@ export function PendingBillFilters({ filters, onChange, bankOptions, headOfAccou
         triggerCls={selectTriggerCls}
       />
 
+      {/* ── Chq No / Cash ────────────────────────────────────────────────── */}
+      <SelectDropdown
+        value={filters.chqNoOrCash}
+        onChange={(v) => set('chqNoOrCash', v)}
+        placeholder="All Chq/Cash"
+        options={[{ value: '', label: 'All Chq/Cash' }, ...chqNoOrCashOptions.map((c) => ({ value: c, label: c }))]}
+        triggerCls={selectTriggerCls}
+      />
+
       {/* ── Head of Account ──────────────────────────────────────────────── */}
       <SelectDropdown
         value={filters.headOfAccount}
@@ -176,6 +189,7 @@ export function PendingBillFilters({ filters, onChange, bankOptions, headOfAccou
         placeholder="Pending"
         options={[
           { value: 'Pending', label: 'Pending' },
+          { value: 'Approved', label: 'Approved' },
           { value: 'Cleared', label: 'Cleared' },
           { value: 'All', label: 'All' },
         ]}

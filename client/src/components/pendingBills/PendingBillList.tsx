@@ -1,11 +1,13 @@
 import { useMemo, useState, useCallback, useEffect } from 'react';
 import { PendingBillRow } from './PendingBillRow';
+import { ClearBillsModal } from './ClearBillsModal';
+import { ClearedBatchesModal } from './ClearedBatchesModal';
 import { EntrySkeleton } from '@/components/entries/EntrySkeleton';
 import { PendingBillFilters, CLEAR_FILTERS, type PendingBillFilterState } from './PendingBillFilters';
 import { formatCurrency } from '@/utils/formatCurrency';
 import { useSettings } from '@/context/SettingsContext';
 import { useToast } from '@/context/ToastContext';
-import { apiDeletePendingBill } from '@/api/pendingBills';
+import { apiDeletePendingBill, apiUpdatePendingBill } from '@/api/pendingBills';
 import { exportPendingBillsPDF, exportPendingBillsExcel } from '@/utils/exportPendingBills';
 import type { PendingBill } from '@smp-cashbook/shared';
 
@@ -84,6 +86,9 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [clearBillIds, setClearBillIds] = useState<string[] | null>(null);
+  const [clearedBatchesOpen, setClearedBatchesOpen] = useState(false);
 
   const toggleSelectMode = () => {
     setSelectMode((v) => !v);
@@ -114,8 +119,41 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
     }
   };
 
+  const selectedBills = useMemo(() => bills.filter((b) => selectedIds.has(b.id)), [bills, selectedIds]);
+  const selectedPendingIds  = useMemo(() => selectedBills.filter((b) => b.status === 'Pending').map((b) => b.id), [selectedBills]);
+  const selectedApprovedBills = useMemo(() => selectedBills.filter((b) => b.status === 'Approved'), [selectedBills]);
+  const selectedApprovedTotal = useMemo(() => selectedApprovedBills.reduce((s, b) => s + b.amount, 0), [selectedApprovedBills]);
+
+  const handleBulkApprove = async () => {
+    setApproving(true);
+    try {
+      await Promise.all(selectedPendingIds.map((id) => {
+        const bill = bills.find((b) => b.id === id)!;
+        return apiUpdatePendingBill(id, bill.financialYear, bill.cashBookType, { status: 'Approved' });
+      }));
+      addToast(`${selectedPendingIds.length} ${selectedPendingIds.length === 1 ? 'bill' : 'bills'} approved`, 'success');
+      setSelectedIds(new Set());
+      setSelectMode(false);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Failed to approve bills', 'error');
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const handleCleared = () => {
+    setClearBillIds(null);
+    setSelectedIds(new Set());
+    setSelectMode(false);
+  };
+
   const bankOptions = useMemo(() => {
     const set = new Set(bills.map((b) => b.bank).filter(Boolean));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [bills]);
+
+  const chqNoOrCashOptions = useMemo(() => {
+    const set = new Set(bills.map((b) => b.chqNoOrCash).filter(Boolean));
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [bills]);
 
@@ -133,6 +171,7 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
     let result = bills;
     if (filters.status !== 'All') result = result.filter((b) => b.status === filters.status);
     if (filters.bank) result = result.filter((b) => b.bank === filters.bank);
+    if (filters.chqNoOrCash) result = result.filter((b) => b.chqNoOrCash === filters.chqNoOrCash);
     if (filters.headOfAccount) result = result.filter((b) => b.headOfAccount === filters.headOfAccount);
     if (filters.firmName) result = result.filter((b) => b.firmName === filters.firmName);
     if (filters.dateFrom) result = result.filter((b) => b.billDate >= filters.dateFrom);
@@ -184,16 +223,133 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
             <div className="h-full animate-progress bg-blue-400" />
           </div>
         )}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex-1 min-w-0">
-            <PendingBillFilters
-              filters={filters}
-              onChange={setFilters}
-              bankOptions={bankOptions}
-              headOfAccountOptions={headOfAccountOptions}
-              firmNameOptions={firmNameOptions}
-            />
+        <PendingBillFilters
+          filters={filters}
+          onChange={setFilters}
+          bankOptions={bankOptions}
+          chqNoOrCashOptions={chqNoOrCashOptions}
+          headOfAccountOptions={headOfAccountOptions}
+          firmNameOptions={firmNameOptions}
+        />
+      </div>
+
+      {/* ── Bulk action bar ── */}
+      {selectMode && (
+        <div className="shrink-0 flex items-center gap-3 flex-wrap rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5">
+          <span className="text-xs font-medium text-blue-700">
+            {selectedCount === 0 ? 'Click rows to select' : `${selectedCount} ${selectedCount === 1 ? 'bill' : 'bills'} selected`}
+          </span>
+          {filtered.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedIds(allFilteredSelected ? new Set() : new Set(filtered.map((b) => b.id)))}
+              className="text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline"
+            >
+              {allFilteredSelected ? 'Deselect all' : `Select all (${filtered.length})`}
+            </button>
+          )}
+          {selectedCount > 0 && (
+            <button type="button" onClick={() => setSelectedIds(new Set())} className="text-xs text-slate-500 hover:text-slate-700 hover:underline">
+              Clear
+            </button>
+          )}
+
+          <div className="ml-auto flex items-center gap-2 flex-wrap">
+            {selectedPendingIds.length > 0 && (
+              <button
+                type="button"
+                onClick={handleBulkApprove}
+                disabled={approving}
+                className="h-8 flex items-center gap-1.5 rounded-md border border-blue-300 bg-blue-100
+                  px-2.5 text-xs font-medium text-blue-700 hover:bg-blue-200
+                  disabled:opacity-50 transition-colors"
+              >
+                Approve Selected ({selectedPendingIds.length})
+              </button>
+            )}
+            {selectedApprovedBills.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  const types = new Set(selectedApprovedBills.map((b) => b.cashBookType));
+                  if (types.size > 1) {
+                    addToast('Select approved bills from a single cash book type to clear together', 'error');
+                    return;
+                  }
+                  setClearBillIds(selectedApprovedBills.map((b) => b.id));
+                }}
+                className="h-8 flex items-center gap-1.5 rounded-md border border-green-300 bg-green-100
+                  px-2.5 text-xs font-medium text-green-700 hover:bg-green-200 transition-colors"
+              >
+                Mark Cleared ({selectedApprovedBills.length})
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={selectedCount === 0}
+              onClick={() => exportPendingBillsPDF(selectedBills, exportMeta)}
+              title="Export selected as PDF"
+              className="h-8 flex items-center gap-1.5 rounded-md border border-slate-200 bg-white
+                px-2.5 text-xs font-medium text-slate-600
+                hover:border-red-300 hover:text-red-600
+                disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Export Selected PDF
+            </button>
+            <button
+              type="button"
+              disabled={selectedCount === 0}
+              onClick={() => exportPendingBillsExcel(selectedBills, exportMeta)}
+              title="Export selected as Excel"
+              className="h-8 flex items-center gap-1.5 rounded-md border border-slate-200 bg-white
+                px-2.5 text-xs font-medium text-slate-600
+                hover:border-green-300 hover:text-green-600
+                disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Export Selected Excel
+            </button>
+            <button
+              type="button"
+              disabled={selectedCount === 0}
+              onClick={() => setConfirmOpen(true)}
+              title="Delete selected bills"
+              className="h-8 flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50
+                px-2.5 text-xs font-medium text-red-600
+                hover:bg-red-100 hover:border-red-400
+                disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Delete {selectedCount > 0 ? `(${selectedCount})` : ''}
+            </button>
           </div>
+        </div>
+      )}
+
+      {/* ── Summary bar ── */}
+      <div className="shrink-0 flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+          <span className="text-xs text-amber-600">Pending Total</span>
+          <span className="text-sm font-semibold text-amber-700">{formatCurrency(pendingTotal)}</span>
+        </div>
+        <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+          <span className="text-xs text-green-600">Cleared Total</span>
+          <span className="text-sm font-semibold text-green-700">{formatCurrency(clearedTotal)}</span>
+        </div>
+        <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+          <span className="text-xs text-blue-600">Grand Total</span>
+          <span className="text-sm font-semibold text-blue-700">{formatCurrency(grandTotal)}</span>
+        </div>
+
+        <div className="ml-auto flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setClearedBatchesOpen(true)}
+            title="View saved cleared-bill batches"
+            className="h-9 flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
+              px-2.5 text-xs font-medium text-slate-600
+              hover:border-blue-300 hover:text-blue-600 transition-colors"
+          >
+            Cleared Batches
+          </button>
 
           {!selectMode && (
             <>
@@ -228,29 +384,10 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
             </>
           )}
 
-          {selectMode && (
-            <button
-              type="button"
-              disabled={selectedCount === 0}
-              onClick={() => setConfirmOpen(true)}
-              title="Delete selected bills"
-              className="h-9 flex shrink-0 items-center gap-1.5 rounded-md border border-red-300 bg-red-50
-                px-2.5 text-xs font-medium text-red-600
-                hover:bg-red-100 hover:border-red-400
-                disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-              <span>Delete {selectedCount > 0 ? `(${selectedCount})` : ''}</span>
-            </button>
-          )}
-
           <button
             type="button"
             onClick={toggleSelectMode}
-            title={selectMode ? 'Exit selection mode' : 'Select bills to bulk delete'}
+            title={selectMode ? 'Exit selection mode' : 'Select bills to bulk act on'}
             className={`h-9 flex shrink-0 items-center gap-1.5 rounded-md border px-2.5
               text-xs font-medium transition-colors
               ${selectMode
@@ -264,45 +401,6 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
             </svg>
             <span>{selectMode ? 'Cancel' : 'Select'}</span>
           </button>
-        </div>
-      </div>
-
-      {/* ── Bulk action bar ── */}
-      {selectMode && (
-        <div className="shrink-0 flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5">
-          <span className="text-xs font-medium text-blue-700">
-            {selectedCount === 0 ? 'Click rows to select' : `${selectedCount} ${selectedCount === 1 ? 'bill' : 'bills'} selected`}
-          </span>
-          {filtered.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setSelectedIds(allFilteredSelected ? new Set() : new Set(filtered.map((b) => b.id)))}
-              className="text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline"
-            >
-              {allFilteredSelected ? 'Deselect all' : `Select all (${filtered.length})`}
-            </button>
-          )}
-          {selectedCount > 0 && (
-            <button type="button" onClick={() => setSelectedIds(new Set())} className="text-xs text-slate-500 hover:text-slate-700 hover:underline">
-              Clear
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* ── Summary bar ── */}
-      <div className="shrink-0 flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-          <span className="text-xs text-amber-600">Pending Total</span>
-          <span className="text-sm font-semibold text-amber-700">{formatCurrency(pendingTotal)}</span>
-        </div>
-        <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
-          <span className="text-xs text-green-600">Cleared Total</span>
-          <span className="text-sm font-semibold text-green-700">{formatCurrency(clearedTotal)}</span>
-        </div>
-        <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
-          <span className="text-xs text-blue-600">Grand Total</span>
-          <span className="text-sm font-semibold text-blue-700">{formatCurrency(grandTotal)}</span>
         </div>
       </div>
 
@@ -409,6 +507,26 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
           onConfirm={handleBulkDelete}
           onCancel={() => setConfirmOpen(false)}
           deleting={deleting}
+        />
+      )}
+
+      {clearBillIds && (
+        <ClearBillsModal
+          billIds={clearBillIds}
+          totalAmount={selectedApprovedTotal}
+          financialYear={settings.activeFinancialYear}
+          cashBookType={bills.find((b) => clearBillIds.includes(b.id))!.cashBookType}
+          onClose={() => setClearBillIds(null)}
+          onCleared={handleCleared}
+        />
+      )}
+
+      {clearedBatchesOpen && (
+        <ClearedBatchesModal
+          bills={bills}
+          financialYear={settings.activeFinancialYear}
+          cashBookType={settings.activeCashBookType}
+          onClose={() => setClearedBatchesOpen(false)}
         />
       )}
 

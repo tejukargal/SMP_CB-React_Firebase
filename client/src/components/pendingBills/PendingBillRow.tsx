@@ -1,5 +1,6 @@
 import { memo, useState } from 'react';
 import { PendingBillDetailModal } from './PendingBillDetailModal';
+import { ClearBillsModal } from './ClearBillsModal';
 import { formatCurrency } from '@/utils/formatCurrency';
 import { formatDate } from '@/utils/formatDate';
 import { useToast } from '@/context/ToastContext';
@@ -23,18 +24,33 @@ export const PendingBillRow = memo(function PendingBillRow({
 }: PendingBillRowProps) {
   const [detailOpen, setDetailOpen] = useState(false);
   const [toggling, setToggling] = useState(false);
+  const [clearModalOpen, setClearModalOpen] = useState(false);
   const { addToast } = useToast();
-  const isCleared = bill.status === 'Cleared';
+  const isPending  = bill.status === 'Pending';
+  const isApproved = bill.status === 'Approved';
+  const isCleared  = bill.status === 'Cleared';
 
-  const handleToggleStatus = async (e: React.MouseEvent) => {
+  const handleApprove = async (e: React.MouseEvent) => {
     e.stopPropagation();
     setToggling(true);
     try {
-      const nextStatus = isCleared ? 'Pending' : 'Cleared';
-      await apiUpdatePendingBill(bill.id, bill.financialYear, bill.cashBookType, { status: nextStatus });
-      addToast(nextStatus === 'Cleared' ? 'Bill marked as cleared' : 'Bill reopened', 'success');
+      await apiUpdatePendingBill(bill.id, bill.financialYear, bill.cashBookType, { status: 'Approved' });
+      addToast('Bill approved', 'success');
     } catch (err: unknown) {
-      addToast(err instanceof Error ? err.message : 'Failed to update status', 'error');
+      addToast(err instanceof Error ? err.message : 'Failed to approve bill', 'error');
+    } finally {
+      setToggling(false);
+    }
+  };
+
+  const handleReopen = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setToggling(true);
+    try {
+      await apiUpdatePendingBill(bill.id, bill.financialYear, bill.cashBookType, { status: 'Pending' });
+      addToast('Bill reopened', 'success');
+    } catch (err: unknown) {
+      addToast(err instanceof Error ? err.message : 'Failed to reopen bill', 'error');
     } finally {
       setToggling(false);
     }
@@ -96,29 +112,75 @@ export const PendingBillRow = memo(function PendingBillRow({
         </td>
         <td className="px-2 py-3.5 whitespace-nowrap overflow-hidden">
           <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-            isCleared ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+            isCleared ? 'bg-green-100 text-green-700'
+              : isApproved ? 'bg-blue-100 text-blue-700'
+              : 'bg-amber-100 text-amber-700'
           }`}>
             {bill.status}
           </span>
         </td>
         <td className="px-2 py-3.5 whitespace-nowrap overflow-hidden">
-          <button
-            type="button"
-            onClick={handleToggleStatus}
-            disabled={toggling}
-            className={`rounded-md px-2.5 py-1 text-xs font-medium border transition-colors disabled:opacity-50 ${
-              isCleared
-                ? 'border-slate-200 bg-white text-slate-500 hover:border-amber-300 hover:text-amber-600'
-                : 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100 hover:border-green-300'
-            }`}
-          >
-            {isCleared ? 'Reopen' : 'Mark Cleared'}
-          </button>
+          <div className="flex items-center gap-1.5">
+            {isPending && (
+              <button
+                type="button"
+                onClick={handleApprove}
+                disabled={toggling}
+                className="rounded-md px-2.5 py-1 text-xs font-medium border transition-colors disabled:opacity-50
+                  border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:border-blue-300"
+              >
+                Approve
+              </button>
+            )}
+            {isApproved && (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setClearModalOpen(true); }}
+                  disabled={toggling}
+                  className="rounded-md px-2.5 py-1 text-xs font-medium border transition-colors disabled:opacity-50
+                    border-green-200 bg-green-50 text-green-700 hover:bg-green-100 hover:border-green-300"
+                >
+                  Mark Cleared
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReopen}
+                  disabled={toggling}
+                  className="rounded-md px-2 py-1 text-xs font-medium text-slate-400 hover:text-amber-600 transition-colors disabled:opacity-50"
+                  title="Revert to Pending"
+                >
+                  Revert
+                </button>
+              </>
+            )}
+            {isCleared && (
+              <button
+                type="button"
+                onClick={handleReopen}
+                disabled={toggling}
+                className="rounded-md px-2.5 py-1 text-xs font-medium border transition-colors disabled:opacity-50
+                  border-slate-200 bg-white text-slate-500 hover:border-amber-300 hover:text-amber-600"
+              >
+                Reopen
+              </button>
+            )}
+          </div>
         </td>
       </tr>
 
       {detailOpen && (
         <PendingBillDetailModal bill={bill} onClose={() => setDetailOpen(false)} />
+      )}
+      {clearModalOpen && (
+        <ClearBillsModal
+          billIds={[bill.id]}
+          totalAmount={bill.amount}
+          financialYear={bill.financialYear}
+          cashBookType={bill.cashBookType}
+          onClose={() => setClearModalOpen(false)}
+          onCleared={() => setClearModalOpen(false)}
+        />
       )}
     </>
   );

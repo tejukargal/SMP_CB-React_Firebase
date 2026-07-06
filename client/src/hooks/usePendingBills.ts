@@ -18,11 +18,14 @@ function mapDoc(doc: any, fallbackCashBookType: CashBookType, fallbackFY: string
     billNumber:    data.billNumber    ?? '',
     billDate:      data.billDate      ?? '',
     particulars:   data.particulars   ?? '',
+    remarks:       data.remarks       ?? '',
     status:        data.status        ?? 'Pending',
     financialYear: data.financialYear ?? fallbackFY,
     cashBookType:  (data.cashBookType ?? fallbackCashBookType) as CashBookType,
     createdAt:     data.createdAt?.toDate().toISOString() ?? '',
+    approvedAt:    data.approvedAt as string | undefined,
     clearedAt:     data.clearedAt as string | undefined,
+    clearedBatchId: data.clearedBatchId as string | undefined,
   };
 }
 

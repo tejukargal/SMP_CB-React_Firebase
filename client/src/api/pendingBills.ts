@@ -23,6 +23,7 @@ export interface UpdatePendingBillPayload {
   billNumber?: string;
   billDate?: string;
   particulars?: string;
+  remarks?: string;
   status?: string;
 }
 

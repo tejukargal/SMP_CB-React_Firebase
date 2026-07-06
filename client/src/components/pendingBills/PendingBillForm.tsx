@@ -21,6 +21,7 @@ const EMPTY_FORM: PendingBillFormData = {
   billNumber: '',
   billDate: '',
   particulars: '',
+  remarks: '',
 };
 
 interface FormErrors {
@@ -140,6 +141,7 @@ export function PendingBillForm() {
         billNumber: form.billNumber.trim(),
         billDate: form.billDate,
         particulars: form.particulars ? toProperCase(form.particulars.trim()) : '',
+        remarks: form.remarks.trim(),
         status: 'Pending',
         financialYear: settings.activeFinancialYear,
         cashBookType: settings.activeCashBookType,
@@ -276,7 +278,7 @@ export function PendingBillForm() {
         />
       </div>
 
-      {/* Particulars + Submit */}
+      {/* Particulars + Remarks + Submit */}
       <div className="flex gap-4 items-end">
         <div className="flex-1 relative">
           <Textarea
@@ -296,6 +298,18 @@ export function PendingBillForm() {
             }}
           />
           {particularsOpen && <SuggestDropdown suggestions={particularsSuggestions} onSelect={selectParticulars} />}
+        </div>
+        <div className="flex-1">
+          <Textarea
+            label="Remarks"
+            id="bill-remarks"
+            placeholder=""
+            value={form.remarks}
+            onChange={(e) => set('remarks', e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); formRef.current?.requestSubmit(); }
+            }}
+          />
         </div>
         <div className="shrink-0 self-end flex flex-col items-stretch gap-4">
           <Button type="submit" loading={submitting} className="h-[38px] px-8">

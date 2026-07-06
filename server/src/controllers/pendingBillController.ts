@@ -39,6 +39,7 @@ export async function handleCreatePendingBill(
       billNumber: body.billNumber.trim(),
       billDate: body.billDate,
       particulars: body.particulars ? toProperCase(body.particulars.trim()) : '',
+      remarks: body.remarks?.trim() ?? '',
       status: 'Pending',
       financialYear: body.financialYear,
       cashBookType: body.cashBookType,
@@ -94,14 +95,15 @@ export async function handleUpdatePendingBill(
       billNumber?: string;
       billDate?: string;
       particulars?: string;
+      remarks?: string;
       status?: string;
     };
 
     if (body.amount !== undefined && (isNaN(Number(body.amount)) || Number(body.amount) <= 0)) {
       res.status(400).json({ error: 'amount must be a positive number' }); return;
     }
-    if (body.status && !['Pending', 'Cleared'].includes(body.status)) {
-      res.status(400).json({ error: 'status must be Pending or Cleared' }); return;
+    if (body.status && !['Pending', 'Approved', 'Cleared'].includes(body.status)) {
+      res.status(400).json({ error: 'status must be Pending, Approved, or Cleared' }); return;
     }
 
     const fields: Record<string, unknown> = {};
@@ -114,6 +116,7 @@ export async function handleUpdatePendingBill(
     if (body.billNumber !== undefined) fields['billNumber'] = body.billNumber.trim();
     if (body.billDate !== undefined) fields['billDate'] = body.billDate;
     if (body.particulars !== undefined) fields['particulars'] = body.particulars ? toProperCase(body.particulars.trim()) : '';
+    if (body.remarks !== undefined) fields['remarks'] = body.remarks.trim();
     if (body.status !== undefined) fields['status'] = body.status;
 
     const bill = await updatePendingBill(id, fyParam, typeParam, fields);
