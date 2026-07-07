@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import type { PendingBill } from '@smp-cashbook/shared';
+import type { PendingBill, BillStatus } from '@smp-cashbook/shared';
 import { formatDate } from './formatDate';
 import type { PendingBillFilterState } from '@/components/pendingBills/PendingBillFilters';
 
@@ -37,13 +37,14 @@ const HEAD_S = {
 export interface PendingBillExportMeta {
   financialYear: string;
   cashBookType:  string;
+  status:        BillStatus;
   filters:       PendingBillFilterState;
 }
 
 function addHeader(doc: jsPDF, meta: PendingBillExportMeta): number {
-  const { financialYear, cashBookType, filters } = meta;
+  const { financialYear, cashBookType, status, filters } = meta;
 
-  const title = 'Pending Bills Report';
+  const title = `${status} Bills Report`;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
   doc.text(title, MARGIN, 13, { align: 'left' });
@@ -58,7 +59,6 @@ function addHeader(doc: jsPDF, meta: PendingBillExportMeta): number {
   const parts: string[] = [`FY: ${financialYear}`];
   if (filters.dateFrom || filters.dateTo)
     parts.push(`Bill Date: ${filters.dateFrom ? formatDate(filters.dateFrom) : '—'} – ${filters.dateTo ? formatDate(filters.dateTo) : '—'}`);
-  if (filters.status !== 'All') parts.push(`Status: ${filters.status}`);
   if (filters.bank) parts.push(`Bank: ${filters.bank}`);
   if (filters.chqNoOrCash) parts.push(`Chq/Cash: ${filters.chqNoOrCash}`);
   if (filters.headOfAccount) parts.push(`Head: ${filters.headOfAccount}`);
@@ -128,14 +128,14 @@ export function exportPendingBillsPDF(bills: PendingBill[], meta: PendingBillExp
     },
   });
 
-  doc.save(`smp-pending-bills-${meta.financialYear.replace('/', '-')}.pdf`);
+  doc.save(`smp-pending-bills-${meta.status.toLowerCase()}-${meta.financialYear.replace('/', '-')}.pdf`);
 }
 
 export function exportPendingBillsExcel(bills: PendingBill[], meta: PendingBillExportMeta) {
   const sorted = [...bills].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
 
   const rows: (string | number)[][] = [
-    [`Pending Bills Report — ${meta.cashBookType}`],
+    [`${meta.status} Bills Report — ${meta.cashBookType}`],
     [`Financial Year: ${meta.financialYear}`],
     [],
     COLUMNS,
@@ -168,5 +168,5 @@ export function exportPendingBillsExcel(bills: PendingBill[], meta: PendingBillE
   ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Pending Bills');
-  XLSX.writeFile(wb, `smp-pending-bills-${meta.financialYear.replace('/', '-')}.xlsx`);
+  XLSX.writeFile(wb, `smp-pending-bills-${meta.status.toLowerCase()}-${meta.financialYear.replace('/', '-')}.xlsx`);
 }

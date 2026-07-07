@@ -9,7 +9,45 @@ import { useSettings } from '@/context/SettingsContext';
 import { useToast } from '@/context/ToastContext';
 import { apiDeletePendingBill, apiUpdatePendingBill } from '@/api/pendingBills';
 import { exportPendingBillsPDF, exportPendingBillsExcel } from '@/utils/exportPendingBills';
-import type { PendingBill } from '@smp-cashbook/shared';
+import type { PendingBill, BillStatus } from '@smp-cashbook/shared';
+
+const TABS: BillStatus[] = ['Pending', 'Approved', 'Cleared'];
+
+const TAB_ACTIVE_CLS: Record<BillStatus, string> = {
+  Pending:  'bg-amber-100 text-amber-800 ring-1 ring-amber-300',
+  Approved: 'bg-blue-100 text-blue-800 ring-1 ring-blue-300',
+  Cleared:  'bg-green-100 text-green-800 ring-1 ring-green-300',
+};
+
+const TAB_BADGE_CLS: Record<BillStatus, string> = {
+  Pending:  'bg-amber-200/70 text-amber-800',
+  Approved: 'bg-blue-200/70 text-blue-800',
+  Cleared:  'bg-green-200/70 text-green-800',
+};
+
+const TOTAL_CHIP_BORDER_CLS: Record<BillStatus, string> = {
+  Pending:  'border-amber-200 bg-amber-50',
+  Approved: 'border-blue-200 bg-blue-50',
+  Cleared:  'border-green-200 bg-green-50',
+};
+
+const TOTAL_CHIP_LABEL_CLS: Record<BillStatus, string> = {
+  Pending:  'text-amber-600',
+  Approved: 'text-blue-600',
+  Cleared:  'text-green-600',
+};
+
+const TOTAL_CHIP_VALUE_CLS: Record<BillStatus, string> = {
+  Pending:  'text-amber-700',
+  Approved: 'text-blue-700',
+  Cleared:  'text-green-700',
+};
+
+const STATUS_DATE_LABEL: Record<BillStatus, string> = {
+  Pending:  'Bill Date',
+  Approved: 'Approved At',
+  Cleared:  'Cleared At',
+};
 
 interface PendingBillListProps {
   bills: PendingBill[];
@@ -78,6 +116,7 @@ function BulkDeleteModal({
 }
 
 export function PendingBillList({ bills, loading, refreshing, error }: PendingBillListProps) {
+  const [activeTab, setActiveTab] = useState<BillStatus>('Pending');
   const [filters, setFilters] = useState<PendingBillFilterState>(CLEAR_FILTERS);
   const { settings } = useSettings();
   const { addToast } = useToast();
@@ -94,6 +133,18 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
     setSelectMode((v) => !v);
     setSelectedIds(new Set());
   };
+
+  const handleTabChange = (tab: BillStatus) => {
+    setActiveTab(tab);
+    setSelectedIds(new Set());
+    setSelectMode(false);
+  };
+
+  const tabCounts = useMemo(() => {
+    const counts: Record<BillStatus, number> = { Pending: 0, Approved: 0, Cleared: 0 };
+    bills.forEach((b) => { counts[b.status]++; });
+    return counts;
+  }, [bills]);
 
   const onToggle = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -146,24 +197,25 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
     setSelectMode(false);
   };
 
+  const tabBills = useMemo(() => bills.filter((b) => b.status === activeTab), [bills, activeTab]);
+
   const bankOptions = useMemo(() => {
-    const set = new Set(bills.map((b) => b.bank).filter(Boolean));
+    const set = new Set(tabBills.map((b) => b.bank).filter(Boolean));
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [bills]);
+  }, [tabBills]);
 
   const chqNoOrCashOptions = useMemo(() => {
-    const set = new Set(bills.map((b) => b.chqNoOrCash).filter(Boolean));
+    const set = new Set(tabBills.map((b) => b.chqNoOrCash).filter(Boolean));
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [bills]);
+  }, [tabBills]);
 
   const headOfAccountOptions = useMemo(() => {
-    const set = new Set(bills.map((b) => b.headOfAccount).filter(Boolean));
+    const set = new Set(tabBills.map((b) => b.headOfAccount).filter(Boolean));
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [bills]);
+  }, [tabBills]);
 
   const filtered = useMemo(() => {
-    let result = bills;
-    if (filters.status !== 'All') result = result.filter((b) => b.status === filters.status);
+    let result = tabBills;
     if (filters.bank) result = result.filter((b) => b.bank === filters.bank);
     if (filters.chqNoOrCash) result = result.filter((b) => b.chqNoOrCash === filters.chqNoOrCash);
     if (filters.headOfAccount) result = result.filter((b) => b.headOfAccount === filters.headOfAccount);
@@ -181,17 +233,16 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
       );
     }
     return [...result].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
-  }, [bills, filters]);
+  }, [tabBills, filters]);
 
   const [visibleCount, setVisibleCount] = useState(10);
-  useEffect(() => { setVisibleCount(10); }, [filters]);
+  useEffect(() => { setVisibleCount(10); }, [filters, activeTab]);
 
   const paginated = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
   const hasMore = filtered.length > visibleCount;
 
-  const pendingTotal = useMemo(() => filtered.filter((b) => b.status === 'Pending').reduce((s, b) => s + b.amount, 0), [filtered]);
-  const clearedTotal = useMemo(() => filtered.filter((b) => b.status === 'Cleared').reduce((s, b) => s + b.amount, 0), [filtered]);
-  const grandTotal = pendingTotal + clearedTotal;
+  const tabTotal = useMemo(() => filtered.reduce((s, b) => s + b.amount, 0), [filtered]);
+  const grandTotal = useMemo(() => bills.reduce((s, b) => s + b.amount, 0), [bills]);
   const paginatedTotal = useMemo(() => paginated.reduce((s, b) => s + b.amount, 0), [paginated]);
 
   if (error) {
@@ -204,10 +255,29 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
 
   const selectedCount = selectedIds.size;
   const allFilteredSelected = filtered.length > 0 && filtered.every((b) => selectedIds.has(b.id));
-  const exportMeta = { financialYear: settings.activeFinancialYear, cashBookType: settings.activeCashBookType, filters };
+  const exportMeta = { financialYear: settings.activeFinancialYear, cashBookType: settings.activeCashBookType, status: activeTab, filters };
+  const showStatusDate = activeTab !== 'Pending';
 
   return (
     <div className="flex flex-col gap-4 h-full min-h-0">
+
+      {/* ── Tabs ── */}
+      <div className="shrink-0 flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+        {TABS.map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => handleTabChange(tab)}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-all
+              ${activeTab === tab ? TAB_ACTIVE_CLS[tab] : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            <span>{tab}</span>
+            <span className={`rounded-full px-1.5 py-0.5 text-xs font-semibold ${activeTab === tab ? TAB_BADGE_CLS[tab] : 'bg-slate-200 text-slate-600'}`}>
+              {tabCounts[tab]}
+            </span>
+          </button>
+        ))}
+      </div>
 
       {/* ── Filter bar ── */}
       <div className="relative shrink-0 py-1">
@@ -318,30 +388,28 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
 
       {/* ── Summary bar ── */}
       <div className="shrink-0 flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-          <span className="text-xs text-amber-600">Pending Total</span>
-          <span className="text-sm font-semibold text-amber-700">{formatCurrency(pendingTotal)}</span>
+        <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${TOTAL_CHIP_BORDER_CLS[activeTab]}`}>
+          <span className={`text-xs ${TOTAL_CHIP_LABEL_CLS[activeTab]}`}>{activeTab} Total</span>
+          <span className={`text-sm font-semibold ${TOTAL_CHIP_VALUE_CLS[activeTab]}`}>{formatCurrency(tabTotal)}</span>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
-          <span className="text-xs text-green-600">Cleared Total</span>
-          <span className="text-sm font-semibold text-green-700">{formatCurrency(clearedTotal)}</span>
-        </div>
-        <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
-          <span className="text-xs text-blue-600">Grand Total</span>
-          <span className="text-sm font-semibold text-blue-700">{formatCurrency(grandTotal)}</span>
+        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+          <span className="text-xs text-slate-500">Grand Total (all)</span>
+          <span className="text-sm font-semibold text-slate-700">{formatCurrency(grandTotal)}</span>
         </div>
 
         <div className="ml-auto flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setClearedBatchesOpen(true)}
-            title="View saved cleared-bill batches"
-            className="h-9 flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
-              px-2.5 text-xs font-medium text-slate-600
-              hover:border-blue-300 hover:text-blue-600 transition-colors"
-          >
-            Cleared Batches
-          </button>
+          {activeTab === 'Cleared' && (
+            <button
+              type="button"
+              onClick={() => setClearedBatchesOpen(true)}
+              title="View saved cleared-bill batches"
+              className="h-9 flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
+                px-2.5 text-xs font-medium text-slate-600
+                hover:border-blue-300 hover:text-blue-600 transition-colors"
+            >
+              Cleared Batches
+            </button>
+          )}
 
           {!selectMode && (
             <>
@@ -419,7 +487,7 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
               <col />
               <col className="w-[100px]" />
               <col className="w-[80px]" />
-              <col className="w-[90px]" />
+              {showStatusDate && <col className="w-[90px]" />}
               <col className="w-[110px]" />
             </colgroup>
             <thead className="sticky top-0 z-10">
@@ -434,7 +502,9 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Firm Name</th>
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bill No</th>
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bill Date</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Status</th>
+                {showStatusDate && (
+                  <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">{STATUS_DATE_LABEL[activeTab]}</th>
+                )}
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Actions</th>
               </tr>
             </thead>
@@ -447,6 +517,7 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
                   selectMode={selectMode}
                   selected={selectedIds.has(bill.id)}
                   onToggle={onToggle}
+                  showStatusDate={showStatusDate}
                 />
               ))}
             </tbody>
@@ -459,7 +530,7 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
                 <td className="pl-2 pr-4 py-2.5 text-sm font-bold text-right whitespace-nowrap text-slate-800 bg-slate-50">
                   {formatCurrency(paginatedTotal)}
                 </td>
-                <td colSpan={6} className="bg-slate-50" />
+                <td colSpan={showStatusDate ? 6 : 5} className="bg-slate-50" />
               </tr>
             </tfoot>
           </table>

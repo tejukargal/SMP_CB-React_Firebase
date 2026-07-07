@@ -1,6 +1,5 @@
 import { useState, useEffect, useTransition } from 'react';
 import { SelectDropdown } from '@/components/ui/SelectDropdown';
-import type { BillStatus } from '@smp-cashbook/shared';
 
 export interface PendingBillFilterState {
   search: string;
@@ -9,7 +8,6 @@ export interface PendingBillFilterState {
   bank: string;
   chqNoOrCash: string;
   headOfAccount: string;
-  status: 'All' | BillStatus;
 }
 
 interface PendingBillFiltersProps {
@@ -27,7 +25,6 @@ export const CLEAR_FILTERS: PendingBillFilterState = {
   bank: '',
   chqNoOrCash: '',
   headOfAccount: '',
-  status: 'Pending',
 };
 
 /** Parse dd/mm/yy or dd/mm/yyyy → YYYY-MM-DD. Returns '' if invalid. */
@@ -97,8 +94,7 @@ export function PendingBillFilters({ filters, onChange, bankOptions, chqNoOrCash
     rawTo.trim() ||
     filters.bank ||
     filters.chqNoOrCash ||
-    filters.headOfAccount ||
-    filters.status !== 'Pending';
+    filters.headOfAccount;
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
@@ -166,20 +162,6 @@ export function PendingBillFilters({ filters, onChange, bankOptions, chqNoOrCash
         onChange={(v) => set('headOfAccount', v)}
         placeholder="All Accounts"
         options={[{ value: '', label: 'All Accounts' }, ...headOfAccountOptions.map((h) => ({ value: h, label: h }))]}
-        triggerCls={selectTriggerCls}
-      />
-
-      {/* ── Status ───────────────────────────────────────────────────────── */}
-      <SelectDropdown
-        value={filters.status}
-        onChange={(v) => set('status', v)}
-        placeholder="Pending"
-        options={[
-          { value: 'Pending', label: 'Pending' },
-          { value: 'Approved', label: 'Approved' },
-          { value: 'Cleared', label: 'Cleared' },
-          { value: 'All', label: 'All' },
-        ]}
         triggerCls={selectTriggerCls}
       />
 

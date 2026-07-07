@@ -13,6 +13,7 @@ interface PendingBillRowProps {
   selectMode?: boolean;
   selected?: boolean;
   onToggle?: (id: string) => void;
+  showStatusDate?: boolean;
 }
 
 export const PendingBillRow = memo(function PendingBillRow({
@@ -21,7 +22,9 @@ export const PendingBillRow = memo(function PendingBillRow({
   selectMode = false,
   selected = false,
   onToggle,
+  showStatusDate = false,
 }: PendingBillRowProps) {
+  const statusDate = bill.status === 'Approved' ? bill.approvedAt : bill.clearedAt;
   const [detailOpen, setDetailOpen] = useState(false);
   const [toggling, setToggling] = useState(false);
   const [clearModalOpen, setClearModalOpen] = useState(false);
@@ -110,15 +113,11 @@ export const PendingBillRow = memo(function PendingBillRow({
         <td className="px-2 py-3.5 text-xs text-slate-600 whitespace-nowrap overflow-hidden">
           {formatDate(bill.billDate)}
         </td>
-        <td className="px-2 py-3.5 whitespace-nowrap overflow-hidden">
-          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-            isCleared ? 'bg-green-100 text-green-700'
-              : isApproved ? 'bg-blue-100 text-blue-700'
-              : 'bg-amber-100 text-amber-700'
-          }`}>
-            {bill.status}
-          </span>
-        </td>
+        {showStatusDate && (
+          <td className="px-2 py-3.5 text-xs text-slate-600 whitespace-nowrap overflow-hidden">
+            {statusDate ? formatDate(statusDate) : '—'}
+          </td>
+        )}
         <td className="px-2 py-3.5 whitespace-nowrap overflow-hidden">
           <div className="flex items-center gap-1.5">
             {isPending && (
@@ -176,7 +175,7 @@ export const PendingBillRow = memo(function PendingBillRow({
         >
           {selectMode && <td />}
           <td colSpan={6} />
-          <td colSpan={5} className="px-2 pb-2.5 pt-0 text-xs text-slate-400 truncate" title={bill.particulars}>
+          <td colSpan={showStatusDate ? 5 : 4} className="px-2 pb-2.5 pt-0 text-xs text-slate-400 truncate" title={bill.particulars}>
             {bill.particulars}
           </td>
         </tr>
