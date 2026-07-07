@@ -1,6 +1,6 @@
 import admin from 'firebase-admin';
 import { db } from '../config/firebase';
-import type { ClearedBillBatch } from '@smp-cashbook/shared';
+import type { ClearedBillBatch, ClearingGroup, PaymentLine, PaymentMode } from '@smp-cashbook/shared';
 
 function pendingBillCollection(financialYear: string, cashBookType: string) {
   return db.collection('pendingBills').doc(financialYear).collection(cashBookType);
@@ -18,27 +18,67 @@ export class InvalidBillsForClearingError extends Error {
   }
 }
 
+export class InvalidPaymentLinesError extends Error {
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+export interface CreatePaymentLineInput {
+  mode: PaymentMode;
+  bank: string;
+  refNo: string;
+  billIds: string[];
+}
+
 export async function createClearedBillBatch(
   financialYear: string,
   cashBookType: string,
-  billIds: string[],
+  group: ClearingGroup,
+  lines: CreatePaymentLineInput[],
   date: string
 ): Promise<ClearedBillBatch> {
+  const billIds = lines.flatMap((line) => line.billIds);
+  if (billIds.length === 0) throw new InvalidPaymentLinesError('At least one bill must be included');
+
+  const seen = new Set<string>();
+  for (const id of billIds) {
+    if (seen.has(id)) throw new InvalidPaymentLinesError(`Bill ${id} is assigned to more than one payment line`);
+    seen.add(id);
+  }
+  for (const line of lines) {
+    if (line.mode !== 'Cash' && !line.refNo.trim()) {
+      throw new InvalidPaymentLinesError(`Reference number is required for ${line.mode} payment lines`);
+    }
+    if (line.billIds.length === 0) {
+      throw new InvalidPaymentLinesError('Every payment line must include at least one bill');
+    }
+  }
+
   const billsCol = pendingBillCollection(financialYear, cashBookType);
   const billRefs = billIds.map((id) => billsCol.doc(id));
   const billSnaps = await Promise.all(billRefs.map((ref) => ref.get()));
 
   const invalidIds: string[] = [];
-  let totalAmount = 0;
+  const amountById = new Map<string, number>();
   billSnaps.forEach((snap, i) => {
     const data = snap.data();
     if (!snap.exists || data?.status !== 'Approved') {
       invalidIds.push(billIds[i] as string);
     } else {
-      totalAmount += data.amount as number;
+      amountById.set(billIds[i] as string, data.amount as number);
     }
   });
   if (invalidIds.length > 0) throw new InvalidBillsForClearingError(invalidIds);
+
+  const paymentLines: PaymentLine[] = lines.map((line) => ({
+    mode: line.mode,
+    bank: line.bank.trim(),
+    refNo: line.refNo.trim(),
+    billIds: line.billIds,
+    amount: line.billIds.reduce((sum, id) => sum + (amountById.get(id) ?? 0), 0),
+  }));
+  const totalAmount = paymentLines.reduce((sum, line) => sum + line.amount, 0);
 
   const batchCol = clearedBatchCollection(financialYear, cashBookType);
   const batchRef = batchCol.doc();
@@ -47,6 +87,8 @@ export async function createClearedBillBatch(
   const writeBatch = db.batch();
   writeBatch.set(batchRef, {
     date,
+    group,
+    paymentLines,
     billIds,
     totalAmount,
     count: billIds.length,
@@ -54,12 +96,18 @@ export async function createClearedBillBatch(
     cashBookType,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
-  billRefs.forEach((ref) => {
-    writeBatch.update(ref, {
-      status: 'Cleared',
-      clearedAt: date,
-      clearedBatchId: batchRef.id,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  paymentLines.forEach((line) => {
+    line.billIds.forEach((id) => {
+      const ref = billsCol.doc(id);
+      writeBatch.update(ref, {
+        status: 'Cleared',
+        clearedAt: date,
+        clearedBatchId: batchRef.id,
+        bank: line.bank,
+        paymentMode: line.mode,
+        paymentRefNo: line.refNo,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
     });
   });
   await writeBatch.commit();
@@ -67,6 +115,8 @@ export async function createClearedBillBatch(
   return {
     id: batchRef.id,
     date,
+    group,
+    paymentLines,
     billIds,
     totalAmount,
     count: billIds.length,
@@ -96,8 +146,11 @@ export async function deleteClearedBillBatch(
     if (!snap.exists || snap.data()?.clearedBatchId !== batchId) return;
     writeBatch.update(billRefs[i], {
       status: 'Approved',
+      bank: '',
       clearedAt: admin.firestore.FieldValue.delete(),
       clearedBatchId: admin.firestore.FieldValue.delete(),
+      paymentMode: admin.firestore.FieldValue.delete(),
+      paymentRefNo: admin.firestore.FieldValue.delete(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
   });
@@ -114,11 +167,17 @@ export async function getClearedBillBatches(
 
   return snap.docs.map((doc) => {
     const data = doc.data();
+    const billIds = (data.billIds as string[]) ?? [];
+    const totalAmount = data.totalAmount as number;
+    const paymentLines = (data.paymentLines as PaymentLine[] | undefined)
+      ?? [{ mode: 'Cash' as PaymentMode, bank: '', refNo: '', billIds, amount: totalAmount }];
     return {
       id: doc.id,
       date: data.date as string,
-      billIds: (data.billIds as string[]) ?? [],
-      totalAmount: data.totalAmount as number,
+      group: (data.group as ClearingGroup | undefined) ?? 'Cash',
+      paymentLines,
+      billIds,
+      totalAmount,
       count: data.count as number,
       financialYear: data.financialYear as string,
       cashBookType: data.cashBookType as ClearedBillBatch['cashBookType'],

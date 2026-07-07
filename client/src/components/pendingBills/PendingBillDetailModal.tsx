@@ -4,6 +4,7 @@ import { apiDeletePendingBill, apiUpdatePendingBill } from '@/api/pendingBills';
 import { ClearBillsModal } from './ClearBillsModal';
 import { formatCurrency } from '@/utils/formatCurrency';
 import { formatDate } from '@/utils/formatDate';
+import { formatPaymentMode } from '@/utils/formatPaymentMode';
 import { toProperCase } from '@smp-cashbook/shared';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -34,8 +35,6 @@ function ViewField({ label, value, valueClass }: { label: string; value: string;
 function toForm(bill: PendingBill): PendingBillFormData {
   return {
     date: bill.date,
-    bank: bill.bank,
-    chqNoOrCash: bill.chqNoOrCash,
     amount: String(bill.amount),
     headOfAccount: bill.headOfAccount,
     firmName: bill.firmName,
@@ -59,7 +58,6 @@ export function PendingBillDetailModal({ bill, onClose }: { bill: PendingBill; o
   const [togglingStatus, setTogglingStatus] = useState(false);
   const [clearModalOpen, setClearModalOpen] = useState(false);
 
-  const [bankOpen, setBankOpen] = useState(false);
   const [hoaOpen, setHoaOpen] = useState(false);
   const [firmOpen, setFirmOpen] = useState(false);
   const [particularsOpen, setParticularsOpen] = useState(false);
@@ -82,7 +80,6 @@ export function PendingBillDetailModal({ bill, onClose }: { bill: PendingBill; o
     return result;
   };
 
-  const bankSuggestions        = useMemo(() => buildSuggestions(form.bank, 'bank'), [form.bank, bills]);
   const hoaSuggestions         = useMemo(() => buildSuggestions(form.headOfAccount, 'headOfAccount'), [form.headOfAccount, bills]);
   const firmSuggestions        = useMemo(() => buildSuggestions(form.firmName, 'firmName'), [form.firmName, bills]);
   const particularsSuggestions = useMemo(() => buildSuggestions(form.particulars, 'particulars'), [form.particulars, bills]);
@@ -109,8 +106,6 @@ export function PendingBillDetailModal({ bill, onClose }: { bill: PendingBill; o
     try {
       await apiUpdatePendingBill(bill.id, bill.financialYear, bill.cashBookType, {
         date: form.date,
-        bank: form.bank ? toProperCase(form.bank.trim()) : '',
-        chqNoOrCash: form.chqNoOrCash.trim(),
         amount: Number(form.amount),
         headOfAccount: toProperCase(form.headOfAccount.trim()),
         firmName: toProperCase(form.firmName.trim()),
@@ -267,54 +262,24 @@ export function PendingBillDetailModal({ bill, onClose }: { bill: PendingBill; o
                 Edit Bill
               </p>
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <DateInput
-                    label="Date"
-                    id="edit-bill-date"
-                    value={form.date}
-                    onChange={(iso) => setField('date', iso)}
-                    error={editErrors.date}
-                  />
-                  <div className="relative">
-                    <Input
-                      label="Bank"
-                      id="edit-bill-bank"
-                      type="text"
-                      value={form.bank}
-                      onChange={(e) => { setField('bank', toProperCase(e.target.value)); setBankOpen(true); }}
-                      onFocus={() => setBankOpen(true)}
-                      onBlur={() => setBankOpen(false)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Escape') { setBankOpen(false); return; }
-                        if (e.key === 'Tab' && bankOpen && bankSuggestions.length > 0) {
-                          e.preventDefault(); setField('bank', bankSuggestions[0]); setBankOpen(false);
-                        }
-                      }}
-                      autoComplete="off"
-                    />
-                    {bankOpen && <SuggestDropdown suggestions={bankSuggestions} onSelect={(v) => { setField('bank', v); setBankOpen(false); }} />}
-                  </div>
-                </div>
+                <DateInput
+                  label="Date"
+                  id="edit-bill-date"
+                  value={form.date}
+                  onChange={(iso) => setField('date', iso)}
+                  error={editErrors.date}
+                />
 
-                <div className="grid grid-cols-2 gap-3">
-                  <Input
-                    label="Chq No / Cash"
-                    id="edit-bill-chq"
-                    type="text"
-                    value={form.chqNoOrCash}
-                    onChange={(e) => setField('chqNoOrCash', e.target.value)}
-                  />
-                  <Input
-                    label="Amount (₹)"
-                    id="edit-bill-amount"
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    value={form.amount}
-                    onChange={(e) => setField('amount', e.target.value)}
-                    error={editErrors.amount}
-                  />
-                </div>
+                <Input
+                  label="Amount (₹)"
+                  id="edit-bill-amount"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={form.amount}
+                  onChange={(e) => setField('amount', e.target.value)}
+                  error={editErrors.amount}
+                />
 
                 <div className="relative">
                   <Input
@@ -410,7 +375,7 @@ export function PendingBillDetailModal({ bill, onClose }: { bill: PendingBill; o
               <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <ViewField label="Date" value={formatDate(bill.date)} />
                 <ViewField label="Bank" value={bill.bank} />
-                <ViewField label="Chq No / Cash" value={bill.chqNoOrCash} />
+                <ViewField label="Payment" value={formatPaymentMode(bill)} />
                 <ViewField label="Head of Account" value={bill.headOfAccount} />
                 <ViewField label="Firm Name" value={bill.firmName} />
                 <ViewField label="Bill Number" value={bill.billNumber} />
@@ -509,11 +474,6 @@ export function PendingBillDetailModal({ bill, onClose }: { bill: PendingBill; o
                     </Button>
                   </>
                 )}
-                {isCleared && (
-                  <Button size="sm" variant="secondary" onClick={handleReopen} loading={togglingStatus}>
-                    Reopen
-                  </Button>
-                )}
                 <Button size="sm" variant="secondary" onClick={() => { setEditing(true); setConfirmDelete(false); }}>
                   Edit
                 </Button>
@@ -527,8 +487,7 @@ export function PendingBillDetailModal({ bill, onClose }: { bill: PendingBill; o
       </div>
       {clearModalOpen && (
         <ClearBillsModal
-          billIds={[bill.id]}
-          totalAmount={bill.amount}
+          bills={[bill]}
           financialYear={bill.financialYear}
           cashBookType={bill.cashBookType}
           onClose={() => setClearModalOpen(false)}

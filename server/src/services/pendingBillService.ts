@@ -9,6 +9,12 @@ function pendingBillCollection(financialYear: string, cashBookType: string) {
     .collection(cashBookType);
 }
 
+export class CannotReopenClearedBillError extends Error {
+  constructor() {
+    super('Cleared bills cannot be reopened directly — delete the cleared batch to revert it to Approved');
+  }
+}
+
 export async function createPendingBill(payload: CreatePendingBillPayload): Promise<PendingBill> {
   const { financialYear, cashBookType } = payload;
   const col = pendingBillCollection(financialYear, cashBookType);
@@ -16,14 +22,14 @@ export async function createPendingBill(payload: CreatePendingBillPayload): Prom
   const createdAt = new Date().toISOString();
   const docRef = await col.add({
     ...payload,
+    bank: '',
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
   return {
     id: docRef.id,
     date: payload.date,
-    bank: payload.bank ?? '',
-    chqNoOrCash: payload.chqNoOrCash ?? '',
+    bank: '',
     amount: payload.amount,
     headOfAccount: payload.headOfAccount,
     firmName: payload.firmName,
@@ -51,7 +57,7 @@ export async function getPendingBills(
       id: doc.id,
       date: data.date,
       bank: data.bank ?? '',
-      chqNoOrCash: data.chqNoOrCash ?? '',
+      chqNoOrCash: data.chqNoOrCash as string | undefined, // legacy display fallback only
       amount: data.amount,
       headOfAccount: data.headOfAccount,
       firmName: data.firmName,
@@ -66,6 +72,8 @@ export async function getPendingBills(
       approvedAt: data.approvedAt as string | undefined,
       clearedAt: data.clearedAt as string | undefined,
       clearedBatchId: data.clearedBatchId as string | undefined,
+      paymentMode: data.paymentMode as PendingBill['paymentMode'],
+      paymentRefNo: data.paymentRefNo as string | undefined,
     };
   });
 }
@@ -73,7 +81,6 @@ export async function getPendingBills(
 export interface UpdatePendingBillFields {
   date?: string;
   bank?: string;
-  chqNoOrCash?: string;
   amount?: number;
   headOfAccount?: string;
   firmName?: string;
@@ -93,6 +100,13 @@ export async function updatePendingBill(
   const col = pendingBillCollection(financialYear, cashBookType);
   const ref = col.doc(billId);
 
+  if (fields.status === 'Pending') {
+    const currentSnap = await ref.get();
+    if (currentSnap.data()?.status === 'Cleared') {
+      throw new CannotReopenClearedBillError();
+    }
+  }
+
   const updatePayload: Record<string, unknown> = { ...fields, updatedAt: admin.firestore.FieldValue.serverTimestamp() };
   if (fields.status === 'Approved') {
     updatePayload['approvedAt'] = new Date().toISOString();
@@ -102,6 +116,8 @@ export async function updatePendingBill(
     updatePayload['approvedAt'] = admin.firestore.FieldValue.delete();
     updatePayload['clearedAt'] = admin.firestore.FieldValue.delete();
     updatePayload['clearedBatchId'] = admin.firestore.FieldValue.delete();
+    updatePayload['paymentMode'] = admin.firestore.FieldValue.delete();
+    updatePayload['paymentRefNo'] = admin.firestore.FieldValue.delete();
   }
 
   const [snap] = await Promise.all([
@@ -118,12 +134,18 @@ export async function updatePendingBill(
   const resolvedClearedBatchId = fields.status === 'Pending'
     ? undefined
     : (data.clearedBatchId as string | undefined);
+  const resolvedPaymentMode = fields.status === 'Pending'
+    ? undefined
+    : (data.paymentMode as PendingBill['paymentMode']);
+  const resolvedPaymentRefNo = fields.status === 'Pending'
+    ? undefined
+    : (data.paymentRefNo as string | undefined);
 
   return {
     id: billId,
     date: (fields.date ?? data.date) as string,
     bank: (fields.bank ?? data.bank ?? '') as string,
-    chqNoOrCash: (fields.chqNoOrCash ?? data.chqNoOrCash ?? '') as string,
+    chqNoOrCash: data.chqNoOrCash as string | undefined,
     amount: (fields.amount ?? data.amount) as number,
     headOfAccount: (fields.headOfAccount ?? data.headOfAccount) as string,
     firmName: (fields.firmName ?? data.firmName) as string,
@@ -138,6 +160,8 @@ export async function updatePendingBill(
     approvedAt: resolvedApprovedAt,
     clearedAt: resolvedClearedAt,
     clearedBatchId: resolvedClearedBatchId,
+    paymentMode: resolvedPaymentMode,
+    paymentRefNo: resolvedPaymentRefNo,
   };
 }
 

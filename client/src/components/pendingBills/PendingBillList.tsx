@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback, useEffect } from 'react';
 import { PendingBillRow } from './PendingBillRow';
 import { ClearBillsModal } from './ClearBillsModal';
-import { ClearedBatchesModal } from './ClearedBatchesModal';
+import { ClearedBatchesPanel } from './ClearedBatchesPanel';
 import { EntrySkeleton } from '@/components/entries/EntrySkeleton';
 import { PendingBillFilters, CLEAR_FILTERS, type PendingBillFilterState } from './PendingBillFilters';
 import { formatCurrency } from '@/utils/formatCurrency';
@@ -126,8 +126,8 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [approving, setApproving] = useState(false);
-  const [clearBillIds, setClearBillIds] = useState<string[] | null>(null);
-  const [clearedBatchesOpen, setClearedBatchesOpen] = useState(false);
+  const [clearBills, setClearBills] = useState<PendingBill[] | null>(null);
+  const [clearedView, setClearedView] = useState<'list' | 'batches'>('list');
 
   const toggleSelectMode = () => {
     setSelectMode((v) => !v);
@@ -138,6 +138,7 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
     setActiveTab(tab);
     setSelectedIds(new Set());
     setSelectMode(false);
+    setClearedView('list');
   };
 
   const tabCounts = useMemo(() => {
@@ -173,7 +174,6 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
   const selectedBills = useMemo(() => bills.filter((b) => selectedIds.has(b.id)), [bills, selectedIds]);
   const selectedPendingIds  = useMemo(() => selectedBills.filter((b) => b.status === 'Pending').map((b) => b.id), [selectedBills]);
   const selectedApprovedBills = useMemo(() => selectedBills.filter((b) => b.status === 'Approved'), [selectedBills]);
-  const selectedApprovedTotal = useMemo(() => selectedApprovedBills.reduce((s, b) => s + b.amount, 0), [selectedApprovedBills]);
 
   const handleBulkApprove = async () => {
     setApproving(true);
@@ -192,7 +192,7 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
   };
 
   const handleCleared = () => {
-    setClearBillIds(null);
+    setClearBills(null);
     setSelectedIds(new Set());
     setSelectMode(false);
   };
@@ -204,8 +204,8 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [tabBills]);
 
-  const chqNoOrCashOptions = useMemo(() => {
-    const set = new Set(tabBills.map((b) => b.chqNoOrCash).filter(Boolean));
+  const paymentModeOptions = useMemo(() => {
+    const set = new Set(tabBills.map((b) => b.paymentMode).filter(Boolean) as string[]);
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [tabBills]);
 
@@ -217,7 +217,7 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
   const filtered = useMemo(() => {
     let result = tabBills;
     if (filters.bank) result = result.filter((b) => b.bank === filters.bank);
-    if (filters.chqNoOrCash) result = result.filter((b) => b.chqNoOrCash === filters.chqNoOrCash);
+    if (filters.paymentMode) result = result.filter((b) => b.paymentMode === filters.paymentMode);
     if (filters.headOfAccount) result = result.filter((b) => b.headOfAccount === filters.headOfAccount);
     if (filters.dateFrom) result = result.filter((b) => b.billDate >= filters.dateFrom);
     if (filters.dateTo) result = result.filter((b) => b.billDate <= filters.dateTo);
@@ -257,6 +257,7 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
   const allFilteredSelected = filtered.length > 0 && filtered.every((b) => selectedIds.has(b.id));
   const exportMeta = { financialYear: settings.activeFinancialYear, cashBookType: settings.activeCashBookType, status: activeTab, filters };
   const showStatusDate = activeTab !== 'Pending';
+  const showingBatches = activeTab === 'Cleared' && clearedView === 'batches';
 
   return (
     <div className="flex flex-col gap-4 h-full min-h-0">
@@ -279,6 +280,32 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
         ))}
       </div>
 
+      {/* ── Cleared tab: List / Batches toggle ── */}
+      {activeTab === 'Cleared' && (
+        <div className="shrink-0 flex items-center gap-1 self-start rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+          {(['list', 'batches'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setClearedView(v)}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors
+                ${clearedView === v ? 'bg-white text-slate-800 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              {v === 'list' ? 'List' : 'Batches'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {showingBatches ? (
+        <ClearedBatchesPanel
+          bills={bills}
+          financialYear={settings.activeFinancialYear}
+          cashBookType={settings.activeCashBookType}
+        />
+      ) : (
+        <>
+
       {/* ── Filter bar ── */}
       <div className="relative shrink-0 py-1">
         {refreshing && (
@@ -290,7 +317,7 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
           filters={filters}
           onChange={setFilters}
           bankOptions={bankOptions}
-          chqNoOrCashOptions={chqNoOrCashOptions}
+          paymentModeOptions={paymentModeOptions}
           headOfAccountOptions={headOfAccountOptions}
         />
       </div>
@@ -338,7 +365,7 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
                     addToast('Select approved bills from a single cash book type to clear together', 'error');
                     return;
                   }
-                  setClearBillIds(selectedApprovedBills.map((b) => b.id));
+                  setClearBills(selectedApprovedBills);
                 }}
                 className="h-8 flex items-center gap-1.5 rounded-md border border-green-300 bg-green-100
                   px-2.5 text-xs font-medium text-green-700 hover:bg-green-200 transition-colors"
@@ -398,19 +425,6 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
         </div>
 
         <div className="ml-auto flex items-center gap-2 flex-wrap">
-          {activeTab === 'Cleared' && (
-            <button
-              type="button"
-              onClick={() => setClearedBatchesOpen(true)}
-              title="View saved cleared-bill batches"
-              className="h-9 flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
-                px-2.5 text-xs font-medium text-slate-600
-                hover:border-blue-300 hover:text-blue-600 transition-colors"
-            >
-              Cleared Batches
-            </button>
-          )}
-
           {!selectMode && (
             <>
               <button
@@ -496,7 +510,7 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
                 <th className="py-2.5 pl-4 pr-1 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Sl No</th>
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Date</th>
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bank</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Chq No/Cash</th>
+                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Payment</th>
                 <th className="pl-2 pr-4 py-2.5 text-xs font-medium text-slate-500 text-right whitespace-nowrap bg-white">Amt</th>
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Head Of Acct</th>
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Firm Name</th>
@@ -562,6 +576,9 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
         </div>
       )}
 
+        </>
+      )}
+
       {confirmOpen && (
         <BulkDeleteModal
           count={selectedCount}
@@ -571,23 +588,13 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
         />
       )}
 
-      {clearBillIds && (
+      {clearBills && (
         <ClearBillsModal
-          billIds={clearBillIds}
-          totalAmount={selectedApprovedTotal}
+          bills={clearBills}
           financialYear={settings.activeFinancialYear}
-          cashBookType={bills.find((b) => clearBillIds.includes(b.id))!.cashBookType}
-          onClose={() => setClearBillIds(null)}
+          cashBookType={clearBills[0].cashBookType}
+          onClose={() => setClearBills(null)}
           onCleared={handleCleared}
-        />
-      )}
-
-      {clearedBatchesOpen && (
-        <ClearedBatchesModal
-          bills={bills}
-          financialYear={settings.activeFinancialYear}
-          cashBookType={settings.activeCashBookType}
-          onClose={() => setClearedBatchesOpen(false)}
         />
       )}
 

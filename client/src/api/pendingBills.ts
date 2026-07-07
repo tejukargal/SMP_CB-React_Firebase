@@ -16,7 +16,6 @@ export async function apiGetPendingBills(fy: string, type: string): Promise<Pend
 export interface UpdatePendingBillPayload {
   date?: string;
   bank?: string;
-  chqNoOrCash?: string;
   amount?: number;
   headOfAccount?: string;
   firmName?: string;

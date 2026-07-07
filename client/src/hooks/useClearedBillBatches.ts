@@ -1,18 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { firestore } from '@/firebase';
-import type { ClearedBillBatch, CashBookType } from '@smp-cashbook/shared';
+import type { ClearedBillBatch, CashBookType, PaymentLine } from '@smp-cashbook/shared';
 import type { ActiveCashBookType } from '@smp-cashbook/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapDoc(doc: any, fallbackCashBookType: CashBookType, fallbackFY: string): ClearedBillBatch {
   const data = doc.data();
+  const billIds = data.billIds ?? [];
+  const totalAmount = data.totalAmount ?? 0;
+  const paymentLines: PaymentLine[] = data.paymentLines
+    ?? [{ mode: 'Cash', refNo: '', billIds, amount: totalAmount }];
   return {
     id:            doc.id,
     date:          data.date          ?? '',
-    billIds:       data.billIds       ?? [],
-    totalAmount:   data.totalAmount   ?? 0,
-    count:         data.count         ?? (data.billIds?.length ?? 0),
+    group:         data.group         ?? 'Cash',
+    paymentLines,
+    billIds,
+    totalAmount,
+    count:         data.count         ?? billIds.length,
     financialYear: data.financialYear ?? fallbackFY,
     cashBookType:  (data.cashBookType ?? fallbackCashBookType) as CashBookType,
     createdAt:     data.createdAt?.toDate().toISOString() ?? '',

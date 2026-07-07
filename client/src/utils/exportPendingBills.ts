@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import type { PendingBill, BillStatus } from '@smp-cashbook/shared';
 import { formatDate } from './formatDate';
+import { formatPaymentMode } from './formatPaymentMode';
 import type { PendingBillFilterState } from '@/components/pendingBills/PendingBillFilters';
 
 // ── Page geometry (A4 landscape) ──────────────────────────────────────────────
@@ -60,7 +61,7 @@ function addHeader(doc: jsPDF, meta: PendingBillExportMeta): number {
   if (filters.dateFrom || filters.dateTo)
     parts.push(`Bill Date: ${filters.dateFrom ? formatDate(filters.dateFrom) : '—'} – ${filters.dateTo ? formatDate(filters.dateTo) : '—'}`);
   if (filters.bank) parts.push(`Bank: ${filters.bank}`);
-  if (filters.chqNoOrCash) parts.push(`Chq/Cash: ${filters.chqNoOrCash}`);
+  if (filters.paymentMode) parts.push(`Payment: ${filters.paymentMode}`);
   if (filters.headOfAccount) parts.push(`Head: ${filters.headOfAccount}`);
   if (filters.search.trim()) parts.push(`Search: "${filters.search}"`);
   doc.text(parts.join('   ·   '), PAGE_CX, 20, { align: 'center' });
@@ -70,9 +71,9 @@ function addHeader(doc: jsPDF, meta: PendingBillExportMeta): number {
   return 26;
 }
 
-const COLUMNS = ['Sl No', 'Date', 'Bank', 'Chq No/Cash', 'Amt', 'Head Of Acct', 'Firm Name', 'Bill No', 'Bill Date', 'Particulars', 'Status'];
+const COLUMNS = ['Sl No', 'Date', 'Bank', 'Payment', 'Amt', 'Head Of Acct', 'Firm Name', 'Bill No', 'Bill Date', 'Particulars', 'Status'];
 // Firm Name column carries the particulars as a second, muted line under the firm name
-const PDF_COLUMNS = ['Sl No', 'Date', 'Bank', 'Chq No/Cash', 'Amt', 'Head Of Acct', 'Firm Name', 'Bill No', 'Bill Date', 'Remarks'];
+const PDF_COLUMNS = ['Sl No', 'Date', 'Bank', 'Payment', 'Amt', 'Head Of Acct', 'Firm Name', 'Bill No', 'Bill Date', 'Remarks'];
 
 export function exportPendingBillsPDF(bills: PendingBill[], meta: PendingBillExportMeta) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -85,7 +86,7 @@ export function exportPendingBillsPDF(bills: PendingBill[], meta: PendingBillExp
     String(i + 1),
     formatDate(b.date),
     b.bank || '—',
-    b.chqNoOrCash || '—',
+    formatPaymentMode(b),
     fmtAmt(b.amount),
     b.headOfAccount,
     b.particulars ? `${b.firmName}\n${b.particulars}` : b.firmName,
@@ -146,7 +147,7 @@ export function exportPendingBillsExcel(bills: PendingBill[], meta: PendingBillE
       i + 1,
       formatDate(b.date),
       b.bank,
-      b.chqNoOrCash,
+      formatPaymentMode(b),
       b.amount,
       b.headOfAccount,
       b.firmName,

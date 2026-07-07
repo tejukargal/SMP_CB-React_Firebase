@@ -4,8 +4,11 @@ import {
   getClearedBillBatches,
   deleteClearedBillBatch,
   InvalidBillsForClearingError,
+  InvalidPaymentLinesError,
 } from '../services/clearedBillBatchService';
 import type { CreateClearedBillBatchPayload } from '@smp-cashbook/shared';
+
+const PAYMENT_MODES = ['Cash', 'Cheque', 'AcctPayeeCheque', 'NEFT', 'Online'];
 
 export async function handleCreateClearedBillBatch(
   req: Request,
@@ -15,8 +18,19 @@ export async function handleCreateClearedBillBatch(
   try {
     const body = req.body as Partial<CreateClearedBillBatchPayload>;
 
-    if (!Array.isArray(body.billIds) || body.billIds.length === 0) {
-      res.status(400).json({ error: 'billIds must be a non-empty array' }); return;
+    if (!body.group || !['Cash', 'NonCash'].includes(body.group)) {
+      res.status(400).json({ error: 'group must be Cash or NonCash' }); return;
+    }
+    if (!Array.isArray(body.paymentLines) || body.paymentLines.length === 0) {
+      res.status(400).json({ error: 'paymentLines must be a non-empty array' }); return;
+    }
+    for (const line of body.paymentLines) {
+      if (!line.mode || !PAYMENT_MODES.includes(line.mode)) {
+        res.status(400).json({ error: `invalid payment mode: ${line.mode}` }); return;
+      }
+      if (!Array.isArray(line.billIds) || line.billIds.length === 0) {
+        res.status(400).json({ error: 'each payment line requires at least one bill' }); return;
+      }
     }
     if (!body.date) { res.status(400).json({ error: 'date is required' }); return; }
     if (!body.financialYear) { res.status(400).json({ error: 'financialYear is required' }); return; }
@@ -24,10 +38,16 @@ export async function handleCreateClearedBillBatch(
       res.status(400).json({ error: 'cashBookType must be Aided, Un-Aided, or WP Un-Aided' }); return;
     }
 
-    const batch = await createClearedBillBatch(body.financialYear, body.cashBookType, body.billIds, body.date);
+    const batch = await createClearedBillBatch(
+      body.financialYear,
+      body.cashBookType,
+      body.group,
+      body.paymentLines.map((line) => ({ mode: line.mode, bank: line.bank ?? '', refNo: line.refNo ?? '', billIds: line.billIds })),
+      body.date
+    );
     res.status(201).json({ data: batch, message: 'Bills cleared' });
   } catch (err) {
-    if (err instanceof InvalidBillsForClearingError) {
+    if (err instanceof InvalidBillsForClearingError || err instanceof InvalidPaymentLinesError) {
       res.status(400).json({ error: err.message }); return;
     }
     next(err);

@@ -26,6 +26,8 @@ function mapDoc(doc: any, fallbackCashBookType: CashBookType, fallbackFY: string
     approvedAt:    data.approvedAt as string | undefined,
     clearedAt:     data.clearedAt as string | undefined,
     clearedBatchId: data.clearedBatchId as string | undefined,
+    paymentMode:   data.paymentMode as PendingBill['paymentMode'],
+    paymentRefNo:  data.paymentRefNo as string | undefined,
   };
 }
 

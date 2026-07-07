@@ -4,6 +4,7 @@ import {
   getPendingBills,
   updatePendingBill,
   deletePendingBill,
+  CannotReopenClearedBillError,
 } from '../services/pendingBillService';
 import { toProperCase } from '@smp-cashbook/shared';
 import type { CreatePendingBillPayload } from '@smp-cashbook/shared';
@@ -31,8 +32,6 @@ export async function handleCreatePendingBill(
 
     const payload: CreatePendingBillPayload = {
       date: body.date,
-      bank: body.bank ? toProperCase(body.bank.trim()) : '',
-      chqNoOrCash: body.chqNoOrCash?.trim() ?? '',
       amount: Number(body.amount),
       headOfAccount: toProperCase(body.headOfAccount.trim()),
       firmName: toProperCase(body.firmName.trim()),
@@ -88,7 +87,6 @@ export async function handleUpdatePendingBill(
     const body = req.body as {
       date?: string;
       bank?: string;
-      chqNoOrCash?: string;
       amount?: number;
       headOfAccount?: string;
       firmName?: string;
@@ -109,7 +107,6 @@ export async function handleUpdatePendingBill(
     const fields: Record<string, unknown> = {};
     if (body.date !== undefined) fields['date'] = body.date;
     if (body.bank !== undefined) fields['bank'] = body.bank ? toProperCase(body.bank.trim()) : '';
-    if (body.chqNoOrCash !== undefined) fields['chqNoOrCash'] = body.chqNoOrCash.trim();
     if (body.amount !== undefined) fields['amount'] = Number(body.amount);
     if (body.headOfAccount !== undefined) fields['headOfAccount'] = toProperCase(body.headOfAccount.trim());
     if (body.firmName !== undefined) fields['firmName'] = toProperCase(body.firmName.trim());
@@ -122,6 +119,9 @@ export async function handleUpdatePendingBill(
     const bill = await updatePendingBill(id, fyParam, typeParam, fields);
     res.json({ data: bill, message: 'Pending bill updated' });
   } catch (err) {
+    if (err instanceof CannotReopenClearedBillError) {
+      res.status(400).json({ error: err.message }); return;
+    }
     next(err);
   }
 }

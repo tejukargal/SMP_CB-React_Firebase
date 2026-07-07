@@ -45,40 +45,30 @@ export function RecentPendingBills({ bills, loading }: { bills: PendingBill[]; l
         </div>
       ) : (
         <div className="flex-1 min-h-0 rounded-lg border border-slate-200 overflow-auto">
-          <table className="w-full min-w-[1180px] text-left text-sm table-fixed">
+          <table className="w-full min-w-[820px] text-left text-sm table-fixed">
             <colgroup>
               <col className="w-[44px]" />
               <col className="w-[80px]" />
-              <col className="w-[110px]" />
-              <col className="w-[90px]" />
               <col className="w-[100px]" />
               <col className="w-[130px]" />
-              <col className="w-[140px]" />
+              <col />
               <col className="w-[100px]" />
               <col className="w-[80px]" />
-              <col />
-              <col className="w-[90px]" />
-              <col className="w-[110px]" />
             </colgroup>
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-slate-200 bg-white shadow-sm">
                 <th className="py-2.5 pl-4 pr-1 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Sl No</th>
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Date</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bank</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Chq No/Cash</th>
                 <th className="pl-2 pr-4 py-2.5 text-xs font-medium text-slate-500 text-right whitespace-nowrap bg-white">Amt</th>
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Head Of Acct</th>
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Firm Name</th>
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bill No</th>
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bill Date</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Particulars</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Status</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Actions</th>
               </tr>
             </thead>
             <tbody>
               {recent.map((bill, i) => (
-                <PendingBillRow key={bill.id} bill={bill} slNo={i + 1} />
+                <PendingBillRow key={bill.id} bill={bill} slNo={i + 1} compact />
               ))}
             </tbody>
           </table>
