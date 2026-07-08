@@ -36,7 +36,7 @@ function makeLine(seed?: { mode: PaymentMode; bank: string; refNo: string }): Li
   return {
     id: `line-${lineSeq}-${Date.now()}`,
     mode: seed?.mode ?? 'Cheque',
-    bank: seed?.bank ?? '',
+    bank: seed?.bank ?? 'Can Bank Pd',
     refNo: seed?.refNo ?? '',
     billIds: [],
     retained: seed ? new Set<RetainedField>(['mode', 'bank', 'refNo']) : new Set<RetainedField>(),

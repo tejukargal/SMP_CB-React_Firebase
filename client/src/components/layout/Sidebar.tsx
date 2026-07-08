@@ -137,7 +137,7 @@ const FEATURES = [
 
 export function Sidebar() {
   const { logout } = useAuth();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [logoHovered, setLogoHovered] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [showAbout, setShowAbout] = useState(false);

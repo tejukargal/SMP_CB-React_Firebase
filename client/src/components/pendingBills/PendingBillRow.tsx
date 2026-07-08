@@ -17,6 +17,12 @@ interface PendingBillRowProps {
   showStatusDate?: boolean;
   /** Hides the Bank, Payment, and Actions columns — used by the compact "recent bills" preview */
   compact?: boolean;
+  /** Hides just the Bank and Payment columns — used for the Approved tab */
+  showBankPayment?: boolean;
+  /** Renders Bank and Payment stacked in a single column — used for the Cleared tab */
+  stackBankPayment?: boolean;
+  /** Hides the Actions column — used for the Cleared tab */
+  showActions?: boolean;
 }
 
 export const PendingBillRow = memo(function PendingBillRow({
@@ -27,6 +33,9 @@ export const PendingBillRow = memo(function PendingBillRow({
   onToggle,
   showStatusDate = false,
   compact = false,
+  showBankPayment = true,
+  stackBankPayment = false,
+  showActions = true,
 }: PendingBillRowProps) {
   const statusDate = bill.status === 'Approved' ? bill.approvedAt : bill.clearedAt;
   const [detailOpen, setDetailOpen] = useState(false);
@@ -61,6 +70,9 @@ export const PendingBillRow = memo(function PendingBillRow({
   };
 
   const hasParticulars = !!bill.particulars;
+  const showPaymentSubRow = !compact && showBankPayment && stackBankPayment;
+  const hasSubRow = hasParticulars || showPaymentSubRow;
+  const mainCellY = hasSubRow ? 'pt-3.5 pb-1.5' : 'py-3.5';
   const rowInteraction = {
     onClick: selectMode ? () => onToggle?.(bill.id) : undefined,
     onDoubleClick: !selectMode ? () => setDetailOpen(true) : undefined,
@@ -74,10 +86,10 @@ export const PendingBillRow = memo(function PendingBillRow({
       <tr
         {...rowInteraction}
         className={`transition-colors cursor-pointer align-top
-          ${hasParticulars ? '' : 'border-b border-slate-100'} ${rowBg}`}
+          ${hasSubRow ? '' : 'border-b border-slate-100'} ${rowBg}`}
       >
         {selectMode && (
-          <td className="pl-3 pr-1 py-3.5">
+          <td className={`pl-3 pr-1 ${mainCellY}`}>
             <input
               type="checkbox"
               checked={selected}
@@ -89,44 +101,49 @@ export const PendingBillRow = memo(function PendingBillRow({
           </td>
         )}
 
-        <td className="py-3.5 pl-4 pr-1 text-xs text-slate-400 whitespace-nowrap overflow-hidden">
+        <td className={`pl-4 pr-1 text-xs text-slate-400 whitespace-nowrap overflow-hidden ${mainCellY}`}>
           {slNo}
         </td>
-        <td className="py-3.5 px-2 text-xs text-slate-600 whitespace-nowrap overflow-hidden">
+        <td className={`px-2 text-xs text-slate-600 whitespace-nowrap overflow-hidden ${mainCellY}`}>
           {formatDate(bill.date)}
         </td>
-        {!compact && (
+        {!compact && showBankPayment && !stackBankPayment && (
           <>
-            <td className="px-2 py-3.5 text-sm text-slate-700 truncate">
+            <td className={`px-2 text-sm text-slate-700 truncate ${mainCellY}`}>
               {bill.bank || '—'}
             </td>
-            <td className="px-2 py-3.5 text-xs text-slate-500 whitespace-nowrap overflow-hidden">
+            <td className={`px-2 text-xs text-slate-500 whitespace-nowrap overflow-hidden ${mainCellY}`}>
               {formatPaymentMode(bill)}
             </td>
           </>
         )}
-        <td className="pl-2 pr-4 py-3.5 text-sm font-medium text-right whitespace-nowrap overflow-hidden text-slate-900">
+        {!compact && showBankPayment && stackBankPayment && (
+          <td className={`px-2 text-sm text-slate-700 truncate ${mainCellY}`}>
+            {bill.bank || '—'}
+          </td>
+        )}
+        <td className={`pl-2 pr-4 text-sm font-medium text-right whitespace-nowrap overflow-hidden text-slate-900 ${mainCellY}`}>
           {formatCurrency(bill.amount)}
         </td>
-        <td className="px-2 py-3.5 text-sm text-slate-800 truncate">
+        <td className={`px-2 text-sm text-slate-800 truncate ${mainCellY}`}>
           {bill.headOfAccount}
         </td>
-        <td className="px-2 py-3.5 text-sm text-slate-800 truncate">
+        <td className={`px-2 text-sm text-slate-800 truncate ${mainCellY}`}>
           {bill.firmName}
         </td>
-        <td className="px-2 py-3.5 text-xs text-slate-500 truncate">
+        <td className={`px-2 text-xs text-slate-500 truncate ${mainCellY}`}>
           {bill.billNumber}
         </td>
-        <td className="px-2 py-3.5 text-xs text-slate-600 whitespace-nowrap overflow-hidden">
+        <td className={`px-2 text-xs text-slate-600 whitespace-nowrap overflow-hidden ${mainCellY}`}>
           {formatDate(bill.billDate)}
         </td>
         {showStatusDate && (
-          <td className="px-2 py-3.5 text-xs text-slate-600 whitespace-nowrap overflow-hidden">
+          <td className={`px-2 text-xs text-slate-600 whitespace-nowrap overflow-hidden ${mainCellY}`}>
             {statusDate ? formatDate(statusDate) : '—'}
           </td>
         )}
-        {!compact && (
-          <td className="px-2 py-3.5 whitespace-nowrap overflow-hidden">
+        {!compact && showActions && (
+          <td className={`px-2 whitespace-nowrap overflow-hidden ${mainCellY}`}>
             <div className="flex items-center gap-1.5">
               {isPending && (
                 <button
@@ -166,16 +183,22 @@ export const PendingBillRow = memo(function PendingBillRow({
         )}
       </tr>
 
-      {hasParticulars && (
+      {hasSubRow && (
         <tr
           {...rowInteraction}
           className={`border-b border-slate-100 transition-colors cursor-pointer ${rowBg}`}
         >
           {selectMode && <td />}
-          <td colSpan={4 + (compact ? 0 : 2)} />
+          <td colSpan={4} />
+          {!compact && showBankPayment && !stackBankPayment && <td colSpan={2} />}
+          {showPaymentSubRow && (
+            <td className="px-2 pb-2 pt-0 text-[11px] text-slate-500 truncate">
+              {formatPaymentMode(bill)}
+            </td>
+          )}
           <td
-            colSpan={3 + (showStatusDate ? 1 : 0) + (compact ? 0 : 1)}
-            className="px-2 pb-2.5 pt-0 text-xs text-slate-400 truncate"
+            colSpan={3 + (showStatusDate ? 1 : 0) + (!compact && showActions ? 1 : 0)}
+            className="px-2 pb-2 pt-0 text-xs text-slate-400 truncate"
             title={bill.particulars}
           >
             {bill.particulars}

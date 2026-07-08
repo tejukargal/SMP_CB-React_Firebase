@@ -19,8 +19,12 @@ export interface ClearingListMeta {
 
 function addHeader(doc: jsPDF, title: string, meta: ClearingListMeta): number {
   doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('Sanjay Memorial Polytechnic, Sagar', MARGIN, 8, { align: 'left' });
+
+  doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
-  doc.text(title, MARGIN, 13, { align: 'left' });
+  doc.text(title, MARGIN, 16, { align: 'left' });
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
@@ -148,7 +152,7 @@ export function exportNonCashClearingListPDF(bills: PendingBill[], paymentLines:
     body.push([{
       content: `${PAYMENT_MODE_LABEL[line.mode]}   ·   Bank: ${line.bank || '—'}   ·   Ref No: ${line.refNo || '—'}`,
       colSpan: 7,
-      styles: { fontStyle: 'bold', fillColor: [241, 245, 249] as [number, number, number] },
+      styles: { fontStyle: 'bold', halign: 'left' as const, fillColor: [241, 245, 249] as [number, number, number] },
     }]);
     const lineBills = [...line.billIds]
       .map((id) => billsById.get(id))

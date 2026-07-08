@@ -257,6 +257,10 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
   const allFilteredSelected = filtered.length > 0 && filtered.every((b) => selectedIds.has(b.id));
   const exportMeta = { financialYear: settings.activeFinancialYear, cashBookType: settings.activeCashBookType, status: activeTab, filters };
   const showStatusDate = activeTab !== 'Pending';
+  const showBankPayment = activeTab !== 'Approved';
+  const stackBankPayment = activeTab === 'Cleared';
+  const showActions = activeTab !== 'Cleared';
+  const optimizeHeadOfAcct = activeTab === 'Approved';
   const showingBatches = activeTab === 'Cleared' && clearedView === 'batches';
 
   return (
@@ -280,22 +284,40 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
         ))}
       </div>
 
-      {/* ── Cleared tab: List / Batches toggle ── */}
-      {activeTab === 'Cleared' && (
-        <div className="shrink-0 flex items-center gap-1 self-start rounded-lg border border-slate-200 bg-slate-50 p-0.5">
-          {(['list', 'batches'] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setClearedView(v)}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors
-                ${clearedView === v ? 'bg-white text-slate-800 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              {v === 'list' ? 'List' : 'Batches'}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* ── Filter bar (with Cleared tab's List / Batches toggle alongside it) ── */}
+      <div className="shrink-0 flex items-center gap-2 py-1">
+        {activeTab === 'Cleared' && (
+          <div className="shrink-0 flex items-center gap-1 self-start rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+            {(['list', 'batches'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setClearedView(v)}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors
+                  ${clearedView === v ? 'bg-white text-slate-800 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                {v === 'list' ? 'List' : 'Batches'}
+              </button>
+            ))}
+          </div>
+        )}
+        {!showingBatches && (
+          <div className="relative flex-1 min-w-0">
+            {refreshing && (
+              <div className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden">
+                <div className="h-full animate-progress bg-blue-400" />
+              </div>
+            )}
+            <PendingBillFilters
+              filters={filters}
+              onChange={setFilters}
+              bankOptions={bankOptions}
+              paymentModeOptions={paymentModeOptions}
+              headOfAccountOptions={headOfAccountOptions}
+            />
+          </div>
+        )}
+      </div>
 
       {showingBatches ? (
         <ClearedBatchesPanel
@@ -306,25 +328,12 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
       ) : (
         <>
 
-      {/* ── Filter bar ── */}
-      <div className="relative shrink-0 py-1">
-        {refreshing && (
-          <div className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden">
-            <div className="h-full animate-progress bg-blue-400" />
-          </div>
-        )}
-        <PendingBillFilters
-          filters={filters}
-          onChange={setFilters}
-          bankOptions={bankOptions}
-          paymentModeOptions={paymentModeOptions}
-          headOfAccountOptions={headOfAccountOptions}
-        />
-      </div>
-
       {/* ── Bulk action bar ── */}
-      {selectMode && (
-        <div className="shrink-0 flex items-center gap-3 flex-wrap rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5">
+      {/* Always mounted (visibility toggled, not unmounted) so entering/exiting select mode never shifts the table below it. */}
+      <div className={`shrink-0 flex items-center gap-3 flex-wrap rounded-lg border px-4 py-2.5 transition-colors
+          ${selectMode ? 'border-blue-200 bg-blue-50' : 'invisible border-transparent'}`}
+        aria-hidden={!selectMode}
+      >
           <span className="text-xs font-medium text-blue-700">
             {selectedCount === 0 ? 'Click rows to select' : `${selectedCount} ${selectedCount === 1 ? 'bill' : 'bills'} selected`}
           </span>
@@ -410,8 +419,7 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
               Delete {selectedCount > 0 ? `(${selectedCount})` : ''}
             </button>
           </div>
-        </div>
-      )}
+      </div>
 
       {/* ── Summary bar ── */}
       <div className="shrink-0 flex items-center gap-3 flex-wrap">
@@ -494,23 +502,31 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
               {selectMode && <col className="w-[36px]" />}
               <col className="w-[44px]" />
               <col className="w-[80px]" />
-              <col className="w-[110px]" />
-              <col className="w-[90px]" />
+              {showBankPayment && !stackBankPayment && <col className="w-[110px]" />}
+              {showBankPayment && !stackBankPayment && <col className="w-[90px]" />}
+              {showBankPayment && stackBankPayment && <col className="w-[140px]" />}
               <col className="w-[100px]" />
-              <col className="w-[130px]" />
-              <col />
+              {optimizeHeadOfAcct ? <col className="w-[190px]" /> : <col className="w-[130px]" />}
+              {optimizeHeadOfAcct ? <col className="w-[150px]" /> : <col />}
               <col className="w-[100px]" />
               <col className="w-[80px]" />
               {showStatusDate && <col className="w-[90px]" />}
-              <col className="w-[110px]" />
+              {showActions && <col className="w-[110px]" />}
             </colgroup>
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-slate-200 bg-white shadow-sm">
                 {selectMode && <th className="w-[36px] bg-white" />}
                 <th className="py-2.5 pl-4 pr-1 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Sl No</th>
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Date</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bank</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Payment</th>
+                {showBankPayment && !stackBankPayment && (
+                  <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bank</th>
+                )}
+                {showBankPayment && !stackBankPayment && (
+                  <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Payment</th>
+                )}
+                {showBankPayment && stackBankPayment && (
+                  <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bank / Payment</th>
+                )}
                 <th className="pl-2 pr-4 py-2.5 text-xs font-medium text-slate-500 text-right whitespace-nowrap bg-white">Amt</th>
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Head Of Acct</th>
                 <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Firm Name</th>
@@ -519,7 +535,9 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
                 {showStatusDate && (
                   <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">{STATUS_DATE_LABEL[activeTab]}</th>
                 )}
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Actions</th>
+                {showActions && (
+                  <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -532,19 +550,22 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
                   selected={selectedIds.has(bill.id)}
                   onToggle={onToggle}
                   showStatusDate={showStatusDate}
+                  showBankPayment={showBankPayment}
+                  stackBankPayment={stackBankPayment}
+                  showActions={showActions}
                 />
               ))}
             </tbody>
             <tfoot className="sticky bottom-0 z-10">
               <tr className="border-t-2 border-slate-200 bg-slate-50">
                 {selectMode && <td className="bg-slate-50" />}
-                <td colSpan={4} className="py-2.5 pl-4 pr-2 text-xs font-medium text-slate-500 whitespace-nowrap bg-slate-50">
+                <td colSpan={2 + (showBankPayment ? (stackBankPayment ? 1 : 2) : 0)} className="py-2.5 pl-4 pr-2 text-xs font-medium text-slate-500 whitespace-nowrap bg-slate-50">
                   Total ({paginated.length} of {filtered.length} {filtered.length === 1 ? 'bill' : 'bills'})
                 </td>
                 <td className="pl-2 pr-4 py-2.5 text-sm font-bold text-right whitespace-nowrap text-slate-800 bg-slate-50">
                   {formatCurrency(paginatedTotal)}
                 </td>
-                <td colSpan={showStatusDate ? 6 : 5} className="bg-slate-50" />
+                <td colSpan={4 + (showStatusDate ? 1 : 0) + (showActions ? 1 : 0)} className="bg-slate-50" />
               </tr>
             </tfoot>
           </table>
