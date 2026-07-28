@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { firestore } from '@/firebase';
-import type { ClearedBillBatch, CashBookType, PaymentLine } from '@smp-cashbook/shared';
+import type { ClearedBillBatch, CashBookType, PaymentLine, FirmBankSnapshot } from '@smp-cashbook/shared';
 import type { ActiveCashBookType } from '@smp-cashbook/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -22,6 +22,7 @@ function mapDoc(doc: any, fallbackCashBookType: CashBookType, fallbackFY: string
     financialYear: data.financialYear ?? fallbackFY,
     cashBookType:  (data.cashBookType ?? fallbackCashBookType) as CashBookType,
     createdAt:     data.createdAt?.toDate().toISOString() ?? '',
+    firmBankDetails: data.firmBankDetails as FirmBankSnapshot[] | undefined,
   };
 }
 

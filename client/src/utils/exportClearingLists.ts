@@ -98,6 +98,18 @@ const HEAD_S = {
 
 const HEAD = ['Sl No', 'Bill Date', 'Firm Name', 'Bill No', 'Head Of Acct', 'Amount', 'Particulars'];
 
+/** A, B, ... Z, AA, AB, ... — spreadsheet-style column labels, for numbering payment-line groups. */
+function groupLabel(index: number): string {
+  let n = index + 1;
+  let label = '';
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    label = String.fromCharCode(65 + rem) + label;
+    n = Math.floor((n - 1) / 26);
+  }
+  return label;
+}
+
 /**
  * Appends one bold underlined info row per distinct firm name (in the order given) that has
  * bank details on file — styled like the payment-line group header. Firms with no record are
@@ -208,9 +220,13 @@ export function exportNonCashClearingListPDF(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const body: any[] = [];
   let slNo = 1;
-  groupPaymentLines(paymentLines).forEach((line) => {
+  const groups = groupPaymentLines(paymentLines);
+  groups.forEach((line, groupIndex) => {
+    if (groupIndex > 0) {
+      body.push([{ content: '', colSpan: 7, isSpacerRow: true }]);
+    }
     body.push([{
-      content: `${PAYMENT_MODE_LABEL[line.mode]}   ·   Bank: ${line.bank || '—'}   ·   Ref No: ${line.refNo || '—'}`,
+      content: `${groupLabel(groupIndex)}.   ${PAYMENT_MODE_LABEL[line.mode]}   ·   Bank: ${line.bank || '—'}   ·   Ref No: ${line.refNo || '—'}`,
       colSpan: 7,
       isGroupHeader: true,
       styles: { fontStyle: 'bold', halign: 'left' as const },
@@ -241,6 +257,11 @@ export function exportNonCashClearingListPDF(
     didParseCell: (data) => {
       if (data.section !== 'body') return;
       const row = body[data.row.index];
+      if (row[0]?.isSpacerRow) {
+        data.cell.styles.lineWidth = { top: 0, bottom: 0, left: 0, right: 0 };
+        data.cell.styles.minCellHeight = 3;
+        return;
+      }
       if (row[4] === 'Total:' || row[4] === 'Subtotal:') {
         data.cell.styles.fontStyle = 'bold';
         data.cell.styles.fillColor = HIGHLIGHT_GREY;
