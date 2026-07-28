@@ -10,7 +10,10 @@ export function PendingBillsListPage() {
   );
 
   return (
-    <div className="w-full h-full -mb-6" style={{ animation: 'page-enter 0.22s ease-out' }}>
+    <div
+      className="absolute inset-x-0 top-0 bottom-0 flex flex-col"
+      style={{ animation: 'page-enter 0.22s ease-out' }}
+    >
       <PendingBillList bills={bills} loading={loading} refreshing={refreshing} error={error} />
     </div>
   );

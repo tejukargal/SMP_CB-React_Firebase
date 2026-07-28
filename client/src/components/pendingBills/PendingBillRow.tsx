@@ -72,7 +72,7 @@ export const PendingBillRow = memo(function PendingBillRow({
   const hasParticulars = !!bill.particulars;
   const showPaymentSubRow = !compact && showBankPayment && stackBankPayment;
   const hasSubRow = hasParticulars || showPaymentSubRow;
-  const mainCellY = hasSubRow ? 'pt-3.5 pb-1.5' : 'py-3.5';
+  const mainCellY = hasSubRow ? 'pt-2 pb-0.5' : 'py-2';
   const rowInteraction = {
     onClick: selectMode ? () => onToggle?.(bill.id) : undefined,
     onDoubleClick: !selectMode ? () => setDetailOpen(true) : undefined,
@@ -150,7 +150,7 @@ export const PendingBillRow = memo(function PendingBillRow({
                   type="button"
                   onClick={handleApprove}
                   disabled={toggling}
-                  className="rounded-md px-2.5 py-1 text-xs font-medium border transition-colors disabled:opacity-50
+                  className="rounded-md px-2 py-0.5 text-xs font-medium border transition-colors disabled:opacity-50
                     border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:border-blue-300"
                 >
                   Approve
@@ -162,7 +162,7 @@ export const PendingBillRow = memo(function PendingBillRow({
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setClearModalOpen(true); }}
                     disabled={toggling}
-                    className="rounded-md px-2.5 py-1 text-xs font-medium border transition-colors disabled:opacity-50
+                    className="rounded-md px-2 py-0.5 text-xs font-medium border transition-colors disabled:opacity-50
                       border-green-200 bg-green-50 text-green-700 hover:bg-green-100 hover:border-green-300"
                   >
                     Mark Cleared
@@ -171,7 +171,7 @@ export const PendingBillRow = memo(function PendingBillRow({
                     type="button"
                     onClick={handleReopen}
                     disabled={toggling}
-                    className="rounded-md px-2 py-1 text-xs font-medium text-slate-400 hover:text-amber-600 transition-colors disabled:opacity-50"
+                    className="rounded-md px-1.5 py-0.5 text-xs font-medium text-slate-400 hover:text-amber-600 transition-colors disabled:opacity-50"
                     title="Revert to Pending"
                   >
                     Revert
@@ -192,13 +192,13 @@ export const PendingBillRow = memo(function PendingBillRow({
           <td colSpan={4} />
           {!compact && showBankPayment && !stackBankPayment && <td colSpan={2} />}
           {showPaymentSubRow && (
-            <td className="px-2 pb-2 pt-0 text-[11px] text-slate-500 truncate">
+            <td className="px-2 pb-1 pt-0 text-[11px] text-slate-500 truncate">
               {formatPaymentMode(bill)}
             </td>
           )}
           <td
             colSpan={3 + (showStatusDate ? 1 : 0) + (!compact && showActions ? 1 : 0)}
-            className="px-2 pb-2 pt-0 text-xs text-slate-400 truncate"
+            className="px-2 pb-1 pt-0 text-xs text-slate-400 truncate"
             title={bill.particulars}
           >
             {bill.particulars}

@@ -84,6 +84,15 @@ Report the short commit SHA and branch after pushing.
 
 Run this step **after every successful push**, regardless of what the user said.
 
+**Why both targets matter:** `functions/lib/index.js` is a separately built
+bundle (via esbuild) that imports `server/src/app.ts` — it is NOT rebuilt
+automatically from `server/` or `shared/` source changes. Firebase Hosting's
+`/api/**` rewrite serves that bundle in production. If you deploy hosting
+without rebuilding functions, any new/changed server route (controllers,
+routes, services under `server/src/`, or `shared/`) will silently 404 in
+production while working fine locally. **Always rebuild and deploy both
+together — never deploy hosting alone when `server/` or `shared/` changed.**
+
 **7a — Build the client:**
 
 ```bash
@@ -93,13 +102,22 @@ cd "D:\Apps\React_Firebase_SMP CashBook" && npm run build -w client
 Wait for the build to succeed before continuing. If it fails, report the
 error to the user and stop — do not attempt to deploy broken code.
 
-**7b — Deploy hosting to Firebase:**
+**7b — Build the functions bundle:**
 
 ```bash
-cd "D:\Apps\React_Firebase_SMP CashBook" && npx firebase-tools deploy --only hosting --project smp-cashbook
+cd "D:\Apps\React_Firebase_SMP CashBook\functions" && npm run build
 ```
 
-Report the hosting URL from the deploy output when done.
+Wait for the build to succeed before continuing. If it fails, report the
+error to the user and stop — do not attempt to deploy broken code.
+
+**7c — Deploy functions + hosting to Firebase together:**
+
+```bash
+cd "D:\Apps\React_Firebase_SMP CashBook" && npx firebase-tools deploy --only functions,hosting --project smp-cashbook
+```
+
+Report the hosting URL and function URL from the deploy output when done.
 
 ---
 
@@ -118,4 +136,4 @@ Report the hosting URL from the deploy output when done.
 
 > Committed `abc1234` — "feat: add PDF export for ledger heads list"
 > Pushed to `tejukargal/SMP_CB-React_Firebase` → main ✓
-> Deployed to Firebase Hosting → https://smp-cashbook.web.app ✓
+> Deployed functions + hosting → https://smp-cashbook.web.app ✓

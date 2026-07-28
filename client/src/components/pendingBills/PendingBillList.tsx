@@ -257,23 +257,26 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
   const allFilteredSelected = filtered.length > 0 && filtered.every((b) => selectedIds.has(b.id));
   const exportMeta = { financialYear: settings.activeFinancialYear, cashBookType: settings.activeCashBookType, status: activeTab, filters };
   const showStatusDate = activeTab !== 'Pending';
-  const showBankPayment = activeTab !== 'Approved';
+  const showBankPayment = activeTab === 'Cleared';
   const stackBankPayment = activeTab === 'Cleared';
   const showActions = activeTab !== 'Cleared';
-  const optimizeHeadOfAcct = activeTab === 'Approved';
+  // Pending & Approved no longer show Bank/Payment columns — give that reclaimed width to Head Of Acct instead.
+  const headOfAcctColWidth = activeTab === 'Pending' ? 260 : activeTab === 'Approved' ? 190 : 130;
+  // Approved rows render two buttons (Mark Cleared + Revert) so need more room than Pending's single Approve button.
+  const actionsColWidth = activeTab === 'Approved' ? 190 : 90;
   const showingBatches = activeTab === 'Cleared' && clearedView === 'batches';
 
   return (
-    <div className="flex flex-col gap-4 h-full min-h-0">
+    <div className="flex flex-1 flex-col gap-2 min-h-0 px-2">
 
       {/* ── Tabs ── */}
-      <div className="shrink-0 flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+      <div className="sticky top-0 z-20 shrink-0 flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-0.5">
         {TABS.map((tab) => (
           <button
             key={tab}
             type="button"
             onClick={() => handleTabChange(tab)}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-all
+            className={`flex flex-1 items-center justify-center gap-2 rounded-md py-1.5 text-sm font-medium transition-all
               ${activeTab === tab ? TAB_ACTIVE_CLS[tab] : 'text-slate-500 hover:text-slate-700'}`}
           >
             <span>{tab}</span>
@@ -285,7 +288,7 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
       </div>
 
       {/* ── Filter bar (with Cleared tab's List / Batches toggle alongside it) ── */}
-      <div className="shrink-0 flex items-center gap-2 py-1">
+      <div className="shrink-0 flex items-center gap-2">
         {activeTab === 'Cleared' && (
           <div className="shrink-0 flex items-center gap-1 self-start rounded-lg border border-slate-200 bg-slate-50 p-0.5">
             {(['list', 'batches'] as const).map((v) => (
@@ -328,41 +331,46 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
       ) : (
         <>
 
-      {/* ── Bulk action bar ── */}
-      {/* Always mounted (visibility toggled, not unmounted) so entering/exiting select mode never shifts the table below it. */}
-      <div className={`shrink-0 flex items-center gap-3 flex-wrap rounded-lg border px-4 py-2.5 transition-colors
-          ${selectMode ? 'border-blue-200 bg-blue-50' : 'invisible border-transparent'}`}
-        aria-hidden={!selectMode}
-      >
-          <span className="text-xs font-medium text-blue-700">
-            {selectedCount === 0 ? 'Click rows to select' : `${selectedCount} ${selectedCount === 1 ? 'bill' : 'bills'} selected`}
-          </span>
-          {filtered.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setSelectedIds(allFilteredSelected ? new Set() : new Set(filtered.map((b) => b.id)))}
-              className="text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline"
-            >
-              {allFilteredSelected ? 'Deselect all' : `Select all (${filtered.length})`}
-            </button>
-          )}
-          {selectedCount > 0 && (
-            <button type="button" onClick={() => setSelectedIds(new Set())} className="text-xs text-slate-500 hover:text-slate-700 hover:underline">
-              Clear
-            </button>
-          )}
+      {/* ── Summary bar (bulk-select controls slot in here, between the totals and Select/Cancel, instead of a separate row) ── */}
+      <div className="shrink-0 flex items-center gap-2 flex-nowrap">
+        <div className={`shrink-0 flex h-8 items-center gap-1.5 rounded-lg border px-2.5 ${TOTAL_CHIP_BORDER_CLS[activeTab]}`}>
+          <span className={`text-xs ${TOTAL_CHIP_LABEL_CLS[activeTab]}`}>{activeTab} Total</span>
+          <span className={`text-sm font-semibold ${TOTAL_CHIP_VALUE_CLS[activeTab]}`}>{formatCurrency(tabTotal)}</span>
+        </div>
+        <div className="shrink-0 flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5">
+          <span className="text-xs text-slate-500">Grand Total</span>
+          <span className="text-sm font-semibold text-slate-700">{formatCurrency(grandTotal)}</span>
+        </div>
 
-          <div className="ml-auto flex items-center gap-2 flex-wrap">
+        {selectMode && (
+          <div className="flex-1 min-w-0 h-8 flex items-center gap-2 flex-nowrap overflow-x-auto rounded-lg border border-blue-200 bg-blue-50 px-2.5">
+            <span className="text-xs font-medium text-blue-700 whitespace-nowrap">
+              {selectedCount === 0 ? 'Click rows to select' : `${selectedCount} ${selectedCount === 1 ? 'bill' : 'bills'} selected`}
+            </span>
+            {filtered.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedIds(allFilteredSelected ? new Set() : new Set(filtered.map((b) => b.id)))}
+                className="text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline whitespace-nowrap"
+              >
+                {allFilteredSelected ? 'Deselect' : `Select all (${filtered.length})`}
+              </button>
+            )}
+            {selectedCount > 0 && (
+              <button type="button" onClick={() => setSelectedIds(new Set())} className="text-xs text-slate-500 hover:text-slate-700 hover:underline whitespace-nowrap">
+                Clear
+              </button>
+            )}
             {selectedPendingIds.length > 0 && (
               <button
                 type="button"
                 onClick={handleBulkApprove}
                 disabled={approving}
-                className="h-8 flex items-center gap-1.5 rounded-md border border-blue-300 bg-blue-100
-                  px-2.5 text-xs font-medium text-blue-700 hover:bg-blue-200
+                className="h-7 flex shrink-0 items-center rounded-md border border-blue-300 bg-blue-100
+                  px-2 text-xs font-medium text-blue-700 hover:bg-blue-200
                   disabled:opacity-50 transition-colors"
               >
-                Approve Selected ({selectedPendingIds.length})
+                Approve ({selectedPendingIds.length})
               </button>
             )}
             {selectedApprovedBills.length > 0 && (
@@ -376,10 +384,10 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
                   }
                   setClearBills(selectedApprovedBills);
                 }}
-                className="h-8 flex items-center gap-1.5 rounded-md border border-green-300 bg-green-100
-                  px-2.5 text-xs font-medium text-green-700 hover:bg-green-200 transition-colors"
+                className="h-7 flex shrink-0 items-center rounded-md border border-green-300 bg-green-100
+                  px-2 text-xs font-medium text-green-700 hover:bg-green-200 transition-colors"
               >
-                Mark Cleared ({selectedApprovedBills.length})
+                Cleared ({selectedApprovedBills.length})
               </button>
             )}
             <button
@@ -387,60 +395,57 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
               disabled={selectedCount === 0}
               onClick={() => exportPendingBillsPDF(selectedBills, exportMeta)}
               title="Export selected as PDF"
-              className="h-8 flex items-center gap-1.5 rounded-md border border-slate-200 bg-white
-                px-2.5 text-xs font-medium text-slate-600
+              className="h-7 flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white
+                px-2 text-xs font-medium text-slate-600
                 hover:border-red-300 hover:text-red-600
                 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
-              Export Selected PDF
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+              PDF
             </button>
             <button
               type="button"
               disabled={selectedCount === 0}
               onClick={() => exportPendingBillsExcel(selectedBills, exportMeta)}
               title="Export selected as Excel"
-              className="h-8 flex items-center gap-1.5 rounded-md border border-slate-200 bg-white
-                px-2.5 text-xs font-medium text-slate-600
+              className="h-7 flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white
+                px-2 text-xs font-medium text-slate-600
                 hover:border-green-300 hover:text-green-600
                 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
-              Export Selected Excel
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z" />
+              </svg>
+              Excel
             </button>
             <button
               type="button"
               disabled={selectedCount === 0}
               onClick={() => setConfirmOpen(true)}
               title="Delete selected bills"
-              className="h-8 flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50
-                px-2.5 text-xs font-medium text-red-600
+              className="h-7 flex shrink-0 items-center rounded-md border border-red-300 bg-red-50
+                px-2 text-xs font-medium text-red-600
                 hover:bg-red-100 hover:border-red-400
                 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               Delete {selectedCount > 0 ? `(${selectedCount})` : ''}
             </button>
           </div>
-      </div>
+        )}
 
-      {/* ── Summary bar ── */}
-      <div className="shrink-0 flex items-center gap-3 flex-wrap">
-        <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${TOTAL_CHIP_BORDER_CLS[activeTab]}`}>
-          <span className={`text-xs ${TOTAL_CHIP_LABEL_CLS[activeTab]}`}>{activeTab} Total</span>
-          <span className={`text-sm font-semibold ${TOTAL_CHIP_VALUE_CLS[activeTab]}`}>{formatCurrency(tabTotal)}</span>
-        </div>
-        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-          <span className="text-xs text-slate-500">Grand Total (all)</span>
-          <span className="text-sm font-semibold text-slate-700">{formatCurrency(grandTotal)}</span>
-        </div>
-
-        <div className="ml-auto flex items-center gap-2 flex-wrap">
+        <div className="ml-auto shrink-0 flex items-center gap-1.5 flex-nowrap">
           {!selectMode && (
             <>
               <button
                 type="button"
                 onClick={() => exportPendingBillsPDF(filtered, exportMeta)}
                 title="Export as PDF"
-                className="h-9 flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
-                  px-2.5 text-xs font-medium text-slate-600
+                className="h-8 flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white
+                  px-2 text-xs font-medium text-slate-600
                   hover:border-red-300 hover:text-red-600 transition-colors"
               >
                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -453,8 +458,8 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
                 type="button"
                 onClick={() => exportPendingBillsExcel(filtered, exportMeta)}
                 title="Export as Excel"
-                className="h-9 flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white
-                  px-2.5 text-xs font-medium text-slate-600
+                className="h-8 flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white
+                  px-2 text-xs font-medium text-slate-600
                   hover:border-green-300 hover:text-green-600 transition-colors"
               >
                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -470,7 +475,7 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
             type="button"
             onClick={toggleSelectMode}
             title={selectMode ? 'Exit selection mode' : 'Select bills to bulk act on'}
-            className={`h-9 flex shrink-0 items-center gap-1.5 rounded-md border px-2.5
+            className={`h-8 flex shrink-0 items-center gap-1 rounded-md border px-2
               text-xs font-medium transition-colors
               ${selectMode
                 ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
@@ -506,37 +511,37 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
               {showBankPayment && !stackBankPayment && <col className="w-[90px]" />}
               {showBankPayment && stackBankPayment && <col className="w-[140px]" />}
               <col className="w-[100px]" />
-              {optimizeHeadOfAcct ? <col className="w-[190px]" /> : <col className="w-[130px]" />}
-              {optimizeHeadOfAcct ? <col className="w-[150px]" /> : <col />}
+              <col style={{ width: `${headOfAcctColWidth}px` }} />
+              <col />
               <col className="w-[100px]" />
               <col className="w-[80px]" />
               {showStatusDate && <col className="w-[90px]" />}
-              {showActions && <col className="w-[110px]" />}
+              {showActions && <col style={{ width: `${actionsColWidth}px` }} />}
             </colgroup>
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-slate-200 bg-white shadow-sm">
                 {selectMode && <th className="w-[36px] bg-white" />}
-                <th className="py-2.5 pl-4 pr-1 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Sl No</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Date</th>
+                <th className="py-1.5 pl-4 pr-1 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Sl No</th>
+                <th className="px-2 py-1.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Date</th>
                 {showBankPayment && !stackBankPayment && (
-                  <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bank</th>
+                  <th className="px-2 py-1.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bank</th>
                 )}
                 {showBankPayment && !stackBankPayment && (
-                  <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Payment</th>
+                  <th className="px-2 py-1.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Payment</th>
                 )}
                 {showBankPayment && stackBankPayment && (
-                  <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bank / Payment</th>
+                  <th className="px-2 py-1.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bank / Payment</th>
                 )}
-                <th className="pl-2 pr-4 py-2.5 text-xs font-medium text-slate-500 text-right whitespace-nowrap bg-white">Amt</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Head Of Acct</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Firm Name</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bill No</th>
-                <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bill Date</th>
+                <th className="pl-2 pr-4 py-1.5 text-xs font-medium text-slate-500 text-right whitespace-nowrap bg-white">Amt</th>
+                <th className="px-2 py-1.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Head Of Acct</th>
+                <th className="px-2 py-1.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Firm Name</th>
+                <th className="px-2 py-1.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bill No</th>
+                <th className="px-2 py-1.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Bill Date</th>
                 {showStatusDate && (
-                  <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">{STATUS_DATE_LABEL[activeTab]}</th>
+                  <th className="px-2 py-1.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">{STATUS_DATE_LABEL[activeTab]}</th>
                 )}
                 {showActions && (
-                  <th className="px-2 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Actions</th>
+                  <th className="px-2 py-1.5 text-xs font-medium text-slate-500 whitespace-nowrap bg-white">Actions</th>
                 )}
               </tr>
             </thead>
@@ -559,10 +564,10 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
             <tfoot className="sticky bottom-0 z-10">
               <tr className="border-t-2 border-slate-200 bg-slate-50">
                 {selectMode && <td className="bg-slate-50" />}
-                <td colSpan={2 + (showBankPayment ? (stackBankPayment ? 1 : 2) : 0)} className="py-2.5 pl-4 pr-2 text-xs font-medium text-slate-500 whitespace-nowrap bg-slate-50">
+                <td colSpan={2 + (showBankPayment ? (stackBankPayment ? 1 : 2) : 0)} className="py-1.5 pl-4 pr-2 text-xs font-medium text-slate-500 whitespace-nowrap bg-slate-50">
                   Total ({paginated.length} of {filtered.length} {filtered.length === 1 ? 'bill' : 'bills'})
                 </td>
-                <td className="pl-2 pr-4 py-2.5 text-sm font-bold text-right whitespace-nowrap text-slate-800 bg-slate-50">
+                <td className="pl-2 pr-4 py-1.5 text-sm font-bold text-right whitespace-nowrap text-slate-800 bg-slate-50">
                   {formatCurrency(paginatedTotal)}
                 </td>
                 <td colSpan={4 + (showStatusDate ? 1 : 0) + (showActions ? 1 : 0)} className="bg-slate-50" />
@@ -574,13 +579,13 @@ export function PendingBillList({ bills, loading, refreshing, error }: PendingBi
 
       {/* ── Load more ── */}
       {!loading && filtered.length > 0 && (
-        <div className="shrink-0 flex flex-col items-center gap-2 py-2">
+        <div className="shrink-0 flex items-center justify-center gap-3 py-1.5">
           {hasMore ? (
             <>
               <button
                 type="button"
                 onClick={() => setVisibleCount((v) => v + 100)}
-                className="rounded-lg border border-slate-200 bg-white px-6 py-2 text-sm font-medium
+                className="rounded-lg border border-slate-200 bg-white px-5 py-1.5 text-xs font-medium
                   text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-colors shadow-sm"
               >
                 Load more ({Math.min(100, filtered.length - visibleCount)} more bills)
