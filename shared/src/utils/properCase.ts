@@ -11,3 +11,15 @@ export function toProperCase(str: string): string {
     )
     .join(' ');
 }
+
+/**
+ * Deterministic slug for a firm name, used as its Firestore doc ID so repeat
+ * clearances of the same firm upsert one record instead of creating duplicates.
+ */
+export function slugifyFirmName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}

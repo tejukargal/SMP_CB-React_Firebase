@@ -5,12 +5,22 @@ import { SelectDropdown } from '@/components/ui/SelectDropdown';
 import { SuggestDropdown } from '@/components/ui/SuggestDropdown';
 import { useToast } from '@/context/ToastContext';
 import { usePendingBills } from '@/hooks/usePendingBills';
+import { useFirms } from '@/hooks/useFirms';
 import { apiCreateClearedBillBatch } from '@/api/clearedBillBatches';
+import { apiUpsertFirm } from '@/api/firms';
 import { formatCurrency } from '@/utils/formatCurrency';
 import { PAYMENT_MODE_LABEL } from '@/utils/formatPaymentMode';
 import { exportCashClearingListPDF, exportNonCashClearingListPDF } from '@/utils/exportClearingLists';
 import { toProperCase } from '@smp-cashbook/shared';
-import type { CashBookType, ClearingGroup, PaymentMode, PendingBill } from '@smp-cashbook/shared';
+import type { CashBookType, ClearingGroup, FirmBankSnapshot, PaymentMode, PendingBill } from '@smp-cashbook/shared';
+
+type FirmField = 'accountNo' | 'ifscCode' | 'bankName' | 'branch';
+const FIRM_FIELDS: { key: FirmField; label: string }[] = [
+  { key: 'accountNo', label: 'Account No' },
+  { key: 'ifscCode',  label: 'IFSC Code' },
+  { key: 'bankName',  label: 'Bank Name' },
+  { key: 'branch',    label: 'Branch' },
+];
 
 function todayIso(): string {
   const d = new Date();
@@ -80,9 +90,59 @@ export function ClearBillsModal({ bills, financialYear, cashBookType, onClose, o
 
   const { bills: historicalBills } = usePendingBills(financialYear, cashBookType);
 
+  // ── Firm bank details (optional, entered inline, upserted to the Firm Directory) ──
+  const { firms } = useFirms();
+  const firmMap = useMemo(() => new Map(firms.map((f) => [f.firmName, f])), [firms]);
+  const [bankDetailsOpen, setBankDetailsOpen] = useState(false);
+  const [firmDrafts, setFirmDrafts] = useState<Record<string, Partial<Record<FirmField, string>>>>({});
+  const [firmSaving, setFirmSaving] = useState<Record<string, boolean>>({});
+  const [firmSavedFlash, setFirmSavedFlash] = useState<Record<string, boolean>>({});
+
+  const getFirmField = (name: string, field: FirmField): string =>
+    firmDrafts[name]?.[field] ?? firmMap.get(name)?.[field] ?? '';
+
+  const setFirmField = (name: string, field: FirmField, value: string) =>
+    setFirmDrafts((prev) => ({ ...prev, [name]: { ...prev[name], [field]: value } }));
+
+  const saveFirmField = async (name: string) => {
+    const accountNo = getFirmField(name, 'accountNo');
+    const ifscCode = getFirmField(name, 'ifscCode');
+    const bankName = getFirmField(name, 'bankName');
+    const branch = getFirmField(name, 'branch');
+    if (!accountNo && !ifscCode && !bankName && !branch) return; // nothing entered — don't create an empty record
+    setFirmSaving((prev) => ({ ...prev, [name]: true }));
+    try {
+      await apiUpsertFirm({ firmName: name, accountNo, ifscCode, bankName, branch });
+      setFirmSavedFlash((prev) => ({ ...prev, [name]: true }));
+      setTimeout(() => setFirmSavedFlash((prev) => ({ ...prev, [name]: false })), 1500);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Failed to save firm bank details', 'error');
+    } finally {
+      setFirmSaving((prev) => ({ ...prev, [name]: false }));
+    }
+  };
+
+  const buildFirmSnapshots = (list: PendingBill[]): FirmBankSnapshot[] => {
+    const names = Array.from(new Set(list.map((b) => b.firmName)));
+    return names
+      .map((firmName) => ({
+        firmName,
+        accountNo: getFirmField(firmName, 'accountNo'),
+        ifscCode: getFirmField(firmName, 'ifscCode'),
+        bankName: getFirmField(firmName, 'bankName'),
+        branch: getFirmField(firmName, 'branch'),
+      }))
+      .filter((f) => f.accountNo || f.ifscCode || f.bankName || f.branch);
+  };
+
   const totalAmount = useMemo(() => bills.reduce((s, b) => s + b.amount, 0), [bills]);
-  const cashBills = useMemo(() => bills.filter((b) => groupByBill[b.id] === 'Cash'), [bills, groupByBill]);
-  const nonCashBills = useMemo(() => bills.filter((b) => groupByBill[b.id] !== 'Cash'), [bills, groupByBill]);
+  // Sorted by firm name so the Cash/Non-Cash split and the payment-line bill chips below
+  // list bills in the same order, making it easier to cross-check the two sections.
+  const sortedBills = useMemo(() => [...bills].sort((a, b) => a.firmName.localeCompare(b.firmName)), [bills]);
+  const distinctFirmNames = useMemo(() => Array.from(new Set(sortedBills.map((b) => b.firmName))), [sortedBills]);
+  const firmsOnFileCount = useMemo(() => distinctFirmNames.filter((n) => firmMap.has(n)).length, [distinctFirmNames, firmMap]);
+  const cashBills = useMemo(() => sortedBills.filter((b) => groupByBill[b.id] === 'Cash'), [sortedBills, groupByBill]);
+  const nonCashBills = useMemo(() => sortedBills.filter((b) => groupByBill[b.id] !== 'Cash'), [sortedBills, groupByBill]);
   const cashTotal = useMemo(() => cashBills.reduce((s, b) => s + b.amount, 0), [cashBills]);
   const nonCashTotal = useMemo(() => nonCashBills.reduce((s, b) => s + b.amount, 0), [nonCashBills]);
 
@@ -146,11 +206,12 @@ export function ClearBillsModal({ bills, financialYear, cashBookType, onClose, o
   const lineAmount = (line: LineDraft) =>
     line.billIds.reduce((s, id) => s + (bills.find((b) => b.id === id)?.amount ?? 0), 0);
 
-  const handlePrintCash = () => exportCashClearingListPDF(cashBills, previewMeta);
+  const handlePrintCash = () => exportCashClearingListPDF(cashBills, previewMeta, buildFirmSnapshots(cashBills));
   const handlePrintNonCash = () => exportNonCashClearingListPDF(
     nonCashBills,
     linesWithBills.map((l) => ({ mode: l.mode, bank: l.bank.trim(), refNo: l.refNo.trim(), billIds: l.billIds, amount: lineAmount(l) })),
-    previewMeta
+    previewMeta,
+    buildFirmSnapshots(nonCashBills)
   );
 
   const handleConfirm = async () => {
@@ -226,7 +287,7 @@ export function ClearBillsModal({ bills, financialYear, cashBookType, onClose, o
               </div>
             </div>
             <div className="divide-y divide-slate-100 max-h-52 overflow-y-auto">
-              {bills.map((b) => {
+              {sortedBills.map((b) => {
                 const isCash = groupByBill[b.id] === 'Cash';
                 return (
                   <div key={b.id} className="flex items-center justify-between gap-3 px-4 py-2">
@@ -254,6 +315,61 @@ export function ClearBillsModal({ bills, financialYear, cashBookType, onClose, o
               <span className="font-medium text-emerald-700">Cash: {formatCurrency(cashTotal)} ({cashBills.length})</span>
               <span className="font-medium text-blue-700">Non-Cash: {formatCurrency(nonCashTotal)} ({nonCashBills.length})</span>
             </div>
+          </div>
+
+          {/* Firm bank details (optional) — firm-level, independent of the Cash/Non-Cash split above */}
+          <div className="rounded-lg border border-slate-200 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setBankDetailsOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-4 py-2 bg-slate-50 text-left"
+            >
+              <span className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                <svg className={`h-3 w-3 text-slate-400 transition-transform ${bankDetailsOpen ? 'rotate-90' : ''}`}
+                  fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                Firm bank details (optional)
+              </span>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
+                {firmsOnFileCount} of {distinctFirmNames.length} on file
+              </span>
+            </button>
+            {bankDetailsOpen && (
+              <div className="divide-y divide-slate-100 border-t border-slate-100">
+                {distinctFirmNames.map((name) => (
+                  <div key={name} className="px-4 py-2.5 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <p className="flex-1 min-w-0 truncate text-sm font-medium text-slate-700">{name}</p>
+                      {firmSaving[name] ? (
+                        <span className="text-[11px] text-slate-400">Saving…</span>
+                      ) : firmSavedFlash[name] ? (
+                        <span className="flex items-center gap-1 text-[11px] text-emerald-600">
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Saved
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {FIRM_FIELDS.map(({ key, label }) => (
+                        <input
+                          key={key}
+                          type="text"
+                          placeholder={label}
+                          value={getFirmField(name, key)}
+                          onChange={(e) => setFirmField(name, key, key === 'ifscCode' ? e.target.value.toUpperCase() : e.target.value)}
+                          onBlur={() => saveFirmField(name)}
+                          className="h-9 rounded-md border border-slate-300 px-3 text-sm
+                            focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Step 2: Payment lines for non-cash bills */}

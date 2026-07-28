@@ -1,6 +1,7 @@
 import admin from 'firebase-admin';
 import { db } from '../config/firebase';
-import type { ClearedBillBatch, ClearingGroup, PaymentLine, PaymentMode } from '@smp-cashbook/shared';
+import { getFirmsByNames } from './firmService';
+import type { ClearedBillBatch, ClearingGroup, FirmBankSnapshot, PaymentLine, PaymentMode } from '@smp-cashbook/shared';
 
 function pendingBillCollection(financialYear: string, cashBookType: string) {
   return db.collection('pendingBills').doc(financialYear).collection(cashBookType);
@@ -61,15 +62,26 @@ export async function createClearedBillBatch(
 
   const invalidIds: string[] = [];
   const amountById = new Map<string, number>();
+  const firmNameById = new Map<string, string>();
   billSnaps.forEach((snap, i) => {
     const data = snap.data();
     if (!snap.exists || data?.status !== 'Approved') {
       invalidIds.push(billIds[i] as string);
     } else {
       amountById.set(billIds[i] as string, data.amount as number);
+      if (data.firmName) firmNameById.set(billIds[i] as string, data.firmName as string);
     }
   });
   if (invalidIds.length > 0) throw new InvalidBillsForClearingError(invalidIds);
+
+  // Snapshot each distinct firm's bank details (if on file) at clearance time, so later edits
+  // to the Firm Directory never retroactively change an already-printed/cleared batch.
+  const distinctFirmNames = Array.from(new Set(firmNameById.values()));
+  const firmMap = await getFirmsByNames(distinctFirmNames);
+  const firmBankDetails: FirmBankSnapshot[] = distinctFirmNames
+    .map((name) => firmMap.get(name))
+    .filter((f): f is NonNullable<typeof f> => !!f)
+    .map((f) => ({ firmName: f.firmName, accountNo: f.accountNo, ifscCode: f.ifscCode, bankName: f.bankName, branch: f.branch }));
 
   const paymentLines: PaymentLine[] = lines.map((line) => ({
     mode: line.mode,
@@ -95,6 +107,7 @@ export async function createClearedBillBatch(
     financialYear,
     cashBookType,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    ...(firmBankDetails.length > 0 && { firmBankDetails }),
   });
   paymentLines.forEach((line) => {
     line.billIds.forEach((id) => {
@@ -123,6 +136,7 @@ export async function createClearedBillBatch(
     financialYear,
     cashBookType: cashBookType as ClearedBillBatch['cashBookType'],
     createdAt,
+    ...(firmBankDetails.length > 0 && { firmBankDetails }),
   };
 }
 
@@ -182,6 +196,7 @@ export async function getClearedBillBatches(
       financialYear: data.financialYear as string,
       cashBookType: data.cashBookType as ClearedBillBatch['cashBookType'],
       createdAt: data.createdAt?.toDate().toISOString() ?? '',
+      firmBankDetails: data.firmBankDetails as FirmBankSnapshot[] | undefined,
     };
   });
 }

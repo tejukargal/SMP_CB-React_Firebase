@@ -86,7 +86,7 @@ export const PendingBillRow = memo(function PendingBillRow({
       <tr
         {...rowInteraction}
         className={`transition-colors cursor-pointer align-top
-          ${hasSubRow ? '' : 'border-b border-slate-100'} ${rowBg}`}
+          ${hasSubRow ? '' : 'border-b border-slate-300'} ${rowBg}`}
       >
         {selectMode && (
           <td className={`pl-3 pr-1 ${mainCellY}`}>
@@ -186,7 +186,7 @@ export const PendingBillRow = memo(function PendingBillRow({
       {hasSubRow && (
         <tr
           {...rowInteraction}
-          className={`border-b border-slate-100 transition-colors cursor-pointer ${rowBg}`}
+          className={`border-b border-slate-300 transition-colors cursor-pointer ${rowBg}`}
         >
           {selectMode && <td />}
           <td colSpan={4} />

@@ -10,6 +10,7 @@ import bankReconciliationRoutes from './routes/bankReconciliationRoutes';
 import bankStatementRoutes from './routes/bankStatementRoutes';
 import pendingBillRoutes from './routes/pendingBillRoutes';
 import clearedBillBatchRoutes from './routes/clearedBillBatchRoutes';
+import firmRoutes from './routes/firmRoutes';
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use('/api/bank-reconciliation', authMiddleware, bankReconciliationRoutes);
 app.use('/api/bank-statements', authMiddleware, bankStatementRoutes);
 app.use('/api/pending-bills', authMiddleware, pendingBillRoutes);
 app.use('/api/cleared-batches', authMiddleware, clearedBillBatchRoutes);
+app.use('/api/firms', authMiddleware, firmRoutes);
 
 app.use(errorHandler);
 

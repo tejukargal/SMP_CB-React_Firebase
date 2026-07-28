@@ -63,6 +63,14 @@ export interface CreatePendingBillPayload {
   cashBookType: CashBookType;
 }
 
+export interface FirmBankSnapshot {
+  firmName: string;
+  accountNo: string;
+  ifscCode: string;
+  bankName: string;
+  branch: string;
+}
+
 export interface ClearedBillBatch {
   id: string;
   date: string; // ISO date string "YYYY-MM-DD" — the clearance date chosen by the user
@@ -74,6 +82,8 @@ export interface ClearedBillBatch {
   financialYear: string;
   cashBookType: CashBookType;
   createdAt: string; // ISO timestamp
+  /** Frozen snapshot of each distinct firm's bank details at clearance time, if on file. */
+  firmBankDetails?: FirmBankSnapshot[];
 }
 
 export interface CreateClearedBillBatchPayload {

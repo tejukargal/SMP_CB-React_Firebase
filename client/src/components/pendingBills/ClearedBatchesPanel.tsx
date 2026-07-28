@@ -104,9 +104,9 @@ export function ClearedBatchesPanel({ bills, financialYear, cashBookType }: Clea
       .filter((b): b is PendingBill => !!b);
     const meta = { financialYear: batch.financialYear, cashBookType: batch.cashBookType, date: batch.date };
     if (batch.group === 'Cash') {
-      exportCashClearingListPDF(batchBills, meta);
+      exportCashClearingListPDF(batchBills, meta, batch.firmBankDetails ?? []);
     } else {
-      exportNonCashClearingListPDF(batchBills, batch.paymentLines, meta);
+      exportNonCashClearingListPDF(batchBills, batch.paymentLines, meta, batch.firmBankDetails ?? []);
     }
   };
 
@@ -221,6 +221,20 @@ export function ClearedBatchesPanel({ bills, financialYear, cashBookType }: Clea
                         ))}
                       </tbody>
                     </table>
+                    {batch.firmBankDetails && batch.firmBankDetails.length > 0 && (
+                      <div className="border-t border-slate-200 bg-slate-50/80 px-4 py-2 space-y-1">
+                        <p className="text-[11px] font-semibold text-slate-500">Firm bank details</p>
+                        {batch.firmBankDetails.map((f) => (
+                          <p key={f.firmName} className="text-xs font-semibold text-slate-700">
+                            {f.firmName}
+                            {f.accountNo && <span className="font-normal text-slate-400"> · A/c No: {f.accountNo}</span>}
+                            {f.ifscCode && <span className="font-normal text-slate-400"> · IFSC: {f.ifscCode}</span>}
+                            {f.bankName && <span className="font-normal text-slate-400"> · Bank: {f.bankName}</span>}
+                            {f.branch && <span className="font-normal text-slate-400"> · Branch: {f.branch}</span>}
+                          </p>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
