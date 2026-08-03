@@ -60,7 +60,7 @@ export const EntryRow = memo(function EntryRow({
         onClick={selectMode ? () => onToggle?.(entry.id) : undefined}
         onDoubleClick={!selectMode ? () => setDetailOpen(true) : undefined}
         onContextMenu={handleContextMenu}
-        className={`border-b border-slate-100 transition-colors cursor-pointer align-top
+        className={`border-b border-slate-100 transition-colors cursor-pointer align-top select-none
           ${selectMode
             ? selected
               ? 'bg-blue-50 hover:bg-blue-100'

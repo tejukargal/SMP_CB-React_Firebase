@@ -975,14 +975,24 @@ export function EntryList({ entries, loading, refreshing, error }: EntryListProp
         <div className="flex flex-col items-center gap-2 py-2">
           {hasMore ? (
             <>
-              <button
-                type="button"
-                onClick={() => setVisibleCount((v) => v + 100)}
-                className="rounded-lg border border-slate-200 bg-white px-6 py-2 text-sm font-medium
-                  text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-colors shadow-sm"
-              >
-                Load more ({Math.min(100, filtered.length - visibleCount)} more entries)
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount((v) => v + 100)}
+                  className="rounded-lg border border-slate-200 bg-white px-6 py-2 text-sm font-medium
+                    text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-colors shadow-sm"
+                >
+                  Load more ({Math.min(100, filtered.length - visibleCount)} more entries)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount(filtered.length)}
+                  className="rounded-lg border border-slate-200 bg-white px-6 py-2 text-sm font-medium
+                    text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-colors shadow-sm"
+                >
+                  Show all ({filtered.length})
+                </button>
+              </div>
               <p className="text-xs text-slate-400">
                 Showing {paginatedFiltered.length} of {filtered.length} entries
               </p>
