@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useEntries } from '@/hooks/useEntries';
 import { useSettings } from '@/context/SettingsContext';
+import { useLedgerVerification } from '@/hooks/useLedgerVerification';
 import { EntryDetailModal } from '@/components/entries/EntryDetailModal';
 import { EntrySkeleton } from '@/components/entries/EntrySkeleton';
 import { formatCurrency } from '@/utils/formatCurrency';
 import { formatDate } from '@/utils/formatDate';
 import { exportLedgerPDF, exportLedgerExcel, exportComparePDF, exportCompareExcel, exportLedgerListPDF, exportLedgerListExcel } from '@/utils/exportEntries';
-import type { Entry } from '@smp-cashbook/shared';
+import type { Entry, LedgerVerificationStatus } from '@smp-cashbook/shared';
 
 // Sticky offsets:
 //  - list view:   search bar ≈ 54px  → column headers at top-[54px]
@@ -15,26 +16,53 @@ const STICKY_OFFSET = 'top-[54px]';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface LedgerSummary { head: string; total: number; count: number }
+type HeadVerificationStatus = LedgerVerificationStatus | 'none';
+
+interface LedgerSummary { head: string; total: number; count: number; verificationStatus: HeadVerificationStatus }
+
+/** Aggregates per-entry verification into a single head-level status:
+ *  'verified' only if every entry is verified, 'mismatch' if any entry is flagged, else 'none'. */
+function aggregateHeadStatus(
+  headEntries: Entry[],
+  statusByEntryId: Partial<Record<string, LedgerVerificationStatus>>,
+): HeadVerificationStatus {
+  if (headEntries.length === 0) return 'none';
+  let hasMismatch = false;
+  let allVerified = true;
+  for (const e of headEntries) {
+    const s = statusByEntryId[e.id];
+    if (s === 'mismatch') hasMismatch = true;
+    if (s !== 'verified') allVerified = false;
+  }
+  if (hasMismatch) return 'mismatch';
+  return allVerified ? 'verified' : 'none';
+}
 
 // ── Ledger card ───────────────────────────────────────────────────────────────
 
 function LedgerCard({
   head, total, count, type,
-  compareMode, selectedForCompare,
+  compareMode, selectedForCompare, verificationStatus,
   onClick,
 }: {
   head: string; total: number; count: number;
   type: 'Receipt' | 'Payment';
   compareMode: boolean; selectedForCompare: boolean;
+  verificationStatus: HeadVerificationStatus;
   onClick: () => void;
 }) {
   const isReceipt = type === 'Receipt';
 
+  const verificationBorder = verificationStatus === 'verified'
+    ? 'border-l-4 border-l-green-600'
+    : verificationStatus === 'mismatch'
+    ? 'border-l-4 border-l-amber-600'
+    : 'border-l-4 border-l-transparent';
+
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors
+      className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${verificationBorder}
         ${selectedForCompare
           ? isReceipt ? 'bg-green-50' : 'bg-red-50'
           : isReceipt ? 'bg-white hover:bg-green-50/50' : 'bg-white hover:bg-red-50/50'}`}
@@ -64,8 +92,20 @@ function LedgerCard({
           >
             {head}
           </span>
-          <span className="text-xs text-slate-400">
-            {count} {count === 1 ? 'entry' : 'entries'}
+          <span className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-400">
+              {count} {count === 1 ? 'entry' : 'entries'}
+            </span>
+            {verificationStatus === 'verified' && (
+              <span className="inline-flex items-center rounded px-1 py-0 text-[10px] font-semibold leading-4 bg-green-100 text-green-700">
+                ✓ Verified
+              </span>
+            )}
+            {verificationStatus === 'mismatch' && (
+              <span className="inline-flex items-center rounded px-1 py-0 text-[10px] font-semibold leading-4 bg-amber-100 text-amber-700">
+                ⚠ Discrepancy
+              </span>
+            )}
           </span>
         </div>
         <span className={`text-sm font-bold shrink-0
@@ -119,12 +159,13 @@ function LedgerColumn({
           </div>
         ) : (
           <div className={`divide-y ${isReceipt ? 'divide-green-100' : 'divide-red-100'}`}>
-            {ledgers.map(({ head, total, count }) => (
+            {ledgers.map(({ head, total, count, verificationStatus }) => (
               <LedgerCard
                 key={head}
                 head={head} total={total} count={count} type={type}
                 compareMode={compareMode}
                 selectedForCompare={compareSelection.has(head)}
+                verificationStatus={verificationStatus}
                 onClick={() => onSelect(head)}
               />
             ))}
@@ -137,16 +178,33 @@ function LedgerColumn({
 
 // ── Ledger row — compact row + optional full-width notes sub-row ──────────────
 
-function LedgerRow({ entry }: { entry: Entry }) {
+function LedgerRow({
+  entry, verificationStatus, onCycleVerification,
+}: {
+  entry: Entry;
+  verificationStatus?: LedgerVerificationStatus;
+  onCycleVerification?: () => void;
+}) {
   const [detailOpen, setDetailOpen] = useState(false);
   const { settings } = useSettings();
   const showCashBookBadge = settings.activeCashBookType === 'Both';
+
+  const rowBg = verificationStatus === 'verified'
+    ? 'bg-green-200 hover:bg-green-300 border-l-4 border-l-green-600'
+    : verificationStatus === 'mismatch'
+    ? 'bg-amber-200 hover:bg-amber-300 border-l-4 border-l-amber-600'
+    : 'hover:bg-slate-50';
 
   return (
     <>
       <tr
         onDoubleClick={() => setDetailOpen(true)}
-        className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
+        onContextMenu={(e) => {
+          if (!onCycleVerification) return;
+          e.preventDefault();
+          onCycleVerification();
+        }}
+        className={`border-b border-slate-100 cursor-pointer transition-colors ${rowBg}`}
       >
         <td className="py-2 pl-4 pr-2 text-xs text-slate-500 whitespace-nowrap align-top">
           {formatDate(entry.date)}
@@ -193,11 +251,13 @@ function LedgerRow({ entry }: { entry: Entry }) {
 // ── Transaction panel ─────────────────────────────────────────────────────────
 
 function LedgerTransactionPanel({
-  entries, type, sticky = false,
+  entries, type, sticky = false, statusByEntryId, onCycleVerification,
 }: {
   entries: Entry[];
   type: 'Receipt' | 'Payment';
   sticky?: boolean;
+  statusByEntryId?: Partial<Record<string, LedgerVerificationStatus>>;
+  onCycleVerification?: (entryId: string) => void;
 }) {
   const isReceipt = type === 'Receipt';
   const color = isReceipt ? 'green' : 'red';
@@ -231,7 +291,14 @@ function LedgerTransactionPanel({
               </tr>
             </thead>
             <tbody>
-              {entries.map((e) => <LedgerRow key={e.id} entry={e} />)}
+              {entries.map((e) => (
+                <LedgerRow
+                  key={e.id}
+                  entry={e}
+                  verificationStatus={statusByEntryId?.[e.id]}
+                  onCycleVerification={onCycleVerification ? () => onCycleVerification(e.id) : undefined}
+                />
+              ))}
             </tbody>
           </table>
         ) : (
@@ -290,9 +357,11 @@ function BackBar({ label, onBack, actions }: { label: string; onBack: () => void
 // ── Ledger detail view ────────────────────────────────────────────────────────
 
 function LedgerDetail({
-  head, receipts, payments, onBack,
+  head, receipts, payments, onBack, statusByEntryId, onCycleVerification,
 }: {
   head: string; receipts: Entry[]; payments: Entry[]; onBack: () => void;
+  statusByEntryId: Partial<Record<string, LedgerVerificationStatus>>;
+  onCycleVerification: (entryId: string) => void;
 }) {
   const { settings } = useSettings();
   const { activeFinancialYear: fy, activeCashBookType: cbt } = settings;
@@ -361,8 +430,14 @@ function LedgerDetail({
     <div className="flex flex-col animate-fade-in">
       <BackBar label={head} onBack={onBack} actions={exportActions} />
       <div className="grid grid-cols-2 gap-x-4">
-        <LedgerTransactionPanel entries={receipts} type="Receipt" sticky />
-        <LedgerTransactionPanel entries={payments} type="Payment" sticky />
+        <LedgerTransactionPanel
+          entries={receipts} type="Receipt" sticky
+          statusByEntryId={statusByEntryId} onCycleVerification={onCycleVerification}
+        />
+        <LedgerTransactionPanel
+          entries={payments} type="Payment" sticky
+          statusByEntryId={statusByEntryId} onCycleVerification={onCycleVerification}
+        />
         <TotalsCell entries={receipts} type="Receipt" />
         <TotalsCell entries={payments} type="Payment" />
       </div>
@@ -552,6 +627,10 @@ export function LedgersPage() {
     settings.activeFinancialYear,
     settings.activeCashBookType
   );
+  const { statusByEntryId, cycleStatus } = useLedgerVerification(
+    settings.activeFinancialYear,
+    settings.activeCashBookType,
+  );
 
   // View state
   const [detailHead, setDetailHead]     = useState<string | null>(null);
@@ -562,21 +641,30 @@ export function LedgersPage() {
   const [compareMode, setCompareMode]       = useState(false);
   const [compareSelection, setCompareSelection] = useState<Set<string>>(new Set());
 
-  // Build ledger summaries
-  const { receiptLedgers, paymentLedgers } = useMemo(() => {
-    const rMap = new Map<string, { total: number; count: number }>();
-    const pMap = new Map<string, { total: number; count: number }>();
+  // Group entries per head (recomputed only when entries change)
+  const { receiptGroups, paymentGroups } = useMemo(() => {
+    const rMap = new Map<string, { total: number; count: number; entries: Entry[] }>();
+    const pMap = new Map<string, { total: number; count: number; entries: Entry[] }>();
     for (const entry of entries) {
       const map = entry.type === 'Receipt' ? rMap : pMap;
       const ex = map.get(entry.headOfAccount);
-      if (ex) { ex.total += entry.amount; ex.count += 1; }
-      else map.set(entry.headOfAccount, { total: entry.amount, count: 1 });
+      if (ex) { ex.total += entry.amount; ex.count += 1; ex.entries.push(entry); }
+      else map.set(entry.headOfAccount, { total: entry.amount, count: 1, entries: [entry] });
     }
-    const sort = (m: Map<string, { total: number; count: number }>) =>
-      Array.from(m.entries()).map(([head, d]) => ({ head, ...d }))
-        .sort((a, b) => a.head.localeCompare(b.head));
-    return { receiptLedgers: sort(rMap), paymentLedgers: sort(pMap) };
+    return { receiptGroups: rMap, paymentGroups: pMap };
   }, [entries]);
+
+  // Build ledger summaries, including per-head verification status (recomputed when highlights change)
+  const buildSummaries = (groups: Map<string, { total: number; count: number; entries: Entry[] }>): LedgerSummary[] =>
+    Array.from(groups.entries())
+      .map(([head, d]) => ({
+        head, total: d.total, count: d.count,
+        verificationStatus: aggregateHeadStatus(d.entries, statusByEntryId),
+      }))
+      .sort((a, b) => a.head.localeCompare(b.head));
+
+  const receiptLedgers = useMemo(() => buildSummaries(receiptGroups), [receiptGroups, statusByEntryId]);
+  const paymentLedgers = useMemo(() => buildSummaries(paymentGroups), [paymentGroups, statusByEntryId]);
 
   // Filter by search
   const q = searchQuery.toLowerCase().trim();
@@ -644,6 +732,8 @@ export function LedgersPage() {
           receipts={detailReceipts}
           payments={detailPayments}
           onBack={handleBackFromDetail}
+          statusByEntryId={statusByEntryId}
+          onCycleVerification={cycleStatus}
         />
       </div>
     );
