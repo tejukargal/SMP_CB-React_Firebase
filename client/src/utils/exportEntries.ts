@@ -14,6 +14,9 @@ const PAGE_CX = PAGE_W / 2;   // 148.5 mm — horizontal centre
 // Matches reference formatAmount(): n.toFixed(2) — keeps columns narrow
 const fmtAmt = (n: number) => n.toFixed(2);
 
+// ── Short code for cash book type, used when "Both" is selected ─────────────
+const cbtCode = (t: string) => (t === 'Aided' ? 'A' : t === 'Un-Aided' ? 'U' : t === 'WP Un-Aided' ? 'W' : t);
+
 // ── Colour palette ────────────────────────────────────────────────────────────
 type RGB = [number, number, number];
 const C_WHITE:  RGB = [255, 255, 255];
@@ -460,9 +463,12 @@ export function exportLedgerPDF(
     );
     doc.setTextColor(0, 0, 0);
 
+    const showType = cashBookType === 'Both';
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const body: any[] = side.map((e) => [
       formatDate(e.date),
+      ...(showType ? [cbtCode(e.cashBookType)] : []),
       e.chequeNo || '—',
       fmtAmt(e.amount),
       e.notes || '',
@@ -472,11 +478,21 @@ export function exportLedgerPDF(
       startY:     24,
       margin:     { left: MARGIN, right: MARGIN },
       tableWidth: P_TW,
-      head: [[`${prefix}.Date`, `${prefix}.Chq`, `${prefix}.Amount`, `${prefix}.Notes`]],
+      head: [[
+        `${prefix}.Date`,
+        ...(showType ? [{ content: `${prefix}.Type`, styles: { fontSize: 8 } }] : []),
+        `${prefix}.Chq`, `${prefix}.Amount`, `${prefix}.Notes`,
+      ]],
       body,
       styles:     BASE,
       headStyles: HEAD_S,
-      columnStyles: {
+      columnStyles: showType ? {
+        0: { cellWidth: 25 },
+        1: { cellWidth: 15, halign: 'center' },
+        2: { cellWidth: 20 },
+        3: { cellWidth: 30, halign: 'right' },
+        4: { cellWidth: 100, ...NOTES_COL_STYLE },
+      } : {
         0: { cellWidth: 25 },
         1: { cellWidth: 20 },
         2: { cellWidth: 30, halign: 'right' },
@@ -515,6 +531,8 @@ export function exportLedgerPDF(
   );
   doc.setTextColor(0, 0, 0);
 
+  const showType = cashBookType === 'Both';
+
   // Paired rows (receipts left, payments right, indexed)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const body: any[] = [];
@@ -524,10 +542,12 @@ export function exportLedgerPDF(
     const p = sortedP[i];
     body.push([
       r ? formatDate(r.date)    : '',
+      ...(showType ? [r ? cbtCode(r.cashBookType) : ''] : []),
       r ? (r.chequeNo || '—')   : '',
       r ? fmtAmt(r.amount)      : '',
       r ? (r.notes || '')       : '',
       p ? formatDate(p.date)    : '',
+      ...(showType ? [p ? cbtCode(p.cashBookType) : ''] : []),
       p ? (p.chequeNo || '—')   : '',
       p ? fmtAmt(p.amount)      : '',
       p ? (p.notes || '')       : '',
@@ -538,11 +558,27 @@ export function exportLedgerPDF(
     startY:     24,
     margin:     { left: MARGIN, right: MARGIN },
     tableWidth: 277,
-    head: [['R.Date', 'R.Chq', 'R.Amount', 'R.Notes', 'P.Date', 'P.Chq', 'P.Amount', 'P.Notes']],
+    head: [showType
+      ? [
+          'R.Date', { content: 'R.Type', styles: { fontSize: 8 } }, 'R.Chq', 'R.Amount', 'R.Notes',
+          'P.Date', { content: 'P.Type', styles: { fontSize: 8 } }, 'P.Chq', 'P.Amount', 'P.Notes',
+        ]
+      : ['R.Date', 'R.Chq', 'R.Amount', 'R.Notes', 'P.Date', 'P.Chq', 'P.Amount', 'P.Notes']],
     body,
     styles:     BASE,
     headStyles: HEAD_S,
-    columnStyles: {
+    columnStyles: showType ? {
+      0: { cellWidth: 20 },
+      1: { cellWidth: 15, halign: 'center' },
+      2: { cellWidth: 16 },
+      3: { cellWidth: 22, halign: 'right' },
+      4: { cellWidth: 65, ...NOTES_COL_STYLE },
+      5: { cellWidth: 20 },
+      6: { cellWidth: 15, halign: 'center' },
+      7: { cellWidth: 16 },
+      8: { cellWidth: 22, halign: 'right' },
+      9: { cellWidth: 66, ...NOTES_COL_STYLE },
+    } : {
       0: { cellWidth: 20 },
       1: { cellWidth: 16 },
       2: { cellWidth: 24, halign: 'right' },
@@ -584,11 +620,15 @@ export function exportLedgerExcel(
   const sortedR = sorted(receipts);
   const sortedP = sorted(payments);
 
+  const showType = cashBookType === 'Both';
+
   const rows: (string | number)[][] = [
     [`Ledger: ${head}`],
     [`SMP Cash Book — ${cashBookType}  |  FY: ${financialYear}`],
     [],
-    ['R.Date', 'R.Chq', 'R.Amount', 'R.Notes', 'P.Date', 'P.Chq', 'P.Amount', 'P.Notes'],
+    showType
+      ? ['R.Date', 'R.Type', 'R.Chq', 'R.Amount', 'R.Notes', 'P.Date', 'P.Type', 'P.Chq', 'P.Amount', 'P.Notes']
+      : ['R.Date', 'R.Chq', 'R.Amount', 'R.Notes', 'P.Date', 'P.Chq', 'P.Amount', 'P.Notes'],
   ];
 
   const maxRows = Math.max(sortedR.length, sortedP.length, 1);
@@ -596,21 +636,34 @@ export function exportLedgerExcel(
     const r = sortedR[i];
     const p = sortedP[i];
     rows.push([
-      r ? formatDate(r.date) : '', r ? (r.chequeNo || '') : '',
-      r ? r.amount : '',           r ? (r.notes || '') : '',
-      p ? formatDate(p.date) : '', p ? (p.chequeNo || '') : '',
-      p ? p.amount : '',           p ? (p.notes || '') : '',
+      r ? formatDate(r.date) : '',
+      ...(showType ? [r ? r.cashBookType : ''] : []),
+      r ? (r.chequeNo || '') : '',
+      r ? r.amount : '',
+      r ? (r.notes || '') : '',
+      p ? formatDate(p.date) : '',
+      ...(showType ? [p ? p.cashBookType : ''] : []),
+      p ? (p.chequeNo || '') : '',
+      p ? p.amount : '',
+      p ? (p.notes || '') : '',
     ]);
   }
 
   const totalR = receipts.reduce((s, e) => s + e.amount, 0);
   const totalP = payments.reduce((s, e) => s + e.amount, 0);
   rows.push([]);
-  rows.push(['Receipts Total:', '', totalR, '', 'Payments Total:', '', totalP, '']);
-  rows.push(['Net (R - P):', '', totalR - totalP, '', '', '', '', '']);
+  rows.push(showType
+    ? ['Receipts Total:', '', '', totalR, '', 'Payments Total:', '', '', totalP, '']
+    : ['Receipts Total:', '', totalR, '', 'Payments Total:', '', totalP, '']);
+  rows.push(showType
+    ? ['Net (R - P):', '', '', totalR - totalP, '', '', '', '', '', '']
+    : ['Net (R - P):', '', totalR - totalP, '', '', '', '', '']);
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [
+  ws['!cols'] = showType ? [
+    { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 40 },
+    { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 40 },
+  ] : [
     { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 40 },
     { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 40 },
   ];
