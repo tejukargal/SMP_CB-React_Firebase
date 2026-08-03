@@ -7,7 +7,7 @@ import { EntrySkeleton } from '@/components/entries/EntrySkeleton';
 import { formatCurrency } from '@/utils/formatCurrency';
 import { formatDate } from '@/utils/formatDate';
 import { exportLedgerPDF, exportLedgerExcel, exportComparePDF, exportCompareExcel, exportLedgerListPDF, exportLedgerListExcel } from '@/utils/exportEntries';
-import type { Entry, LedgerVerificationStatus } from '@smp-cashbook/shared';
+import type { Entry, LedgerVerificationStatus, CashBookType } from '@smp-cashbook/shared';
 
 // Sticky offsets:
 //  - list view:   search bar ≈ 54px  → column headers at top-[54px]
@@ -18,7 +18,26 @@ const STICKY_OFFSET = 'top-[54px]';
 
 type HeadVerificationStatus = LedgerVerificationStatus | 'none';
 
-interface LedgerSummary { head: string; total: number; count: number; verificationStatus: HeadVerificationStatus }
+// Short label + colour per cash book type, used when "Both" is active and totals are split out
+const CASH_BOOK_TYPE_STYLE: Record<CashBookType, { label: string; className: string }> = {
+  'Aided':        { label: 'Aided',    className: 'bg-teal-50 text-teal-700' },
+  'Un-Aided':     { label: 'Un-Aided', className: 'bg-orange-50 text-orange-700' },
+  'WP Un-Aided':  { label: 'WP',       className: 'bg-purple-50 text-purple-700' },
+};
+
+function sumByCashBookType(entries: Entry[]): Partial<Record<CashBookType, number>> {
+  const totals: Partial<Record<CashBookType, number>> = {};
+  for (const e of entries) {
+    totals[e.cashBookType] = (totals[e.cashBookType] ?? 0) + e.amount;
+  }
+  return totals;
+}
+
+interface LedgerSummary {
+  head: string; total: number; count: number;
+  verificationStatus: HeadVerificationStatus;
+  byType: Partial<Record<CashBookType, number>>;
+}
 
 /** Aggregates per-entry verification into a single head-level status:
  *  'verified' only if every entry is verified, 'mismatch' if any entry is flagged, else 'none'. */
@@ -43,12 +62,15 @@ function aggregateHeadStatus(
 function LedgerCard({
   head, total, count, type,
   compareMode, selectedForCompare, verificationStatus,
+  byType, showTypeBreakdown,
   onClick,
 }: {
   head: string; total: number; count: number;
   type: 'Receipt' | 'Payment';
   compareMode: boolean; selectedForCompare: boolean;
   verificationStatus: HeadVerificationStatus;
+  byType: Partial<Record<CashBookType, number>>;
+  showTypeBreakdown: boolean;
   onClick: () => void;
 }) {
   const isReceipt = type === 'Receipt';
@@ -92,10 +114,18 @@ function LedgerCard({
           >
             {head}
           </span>
-          <span className="flex items-center gap-1.5">
+          <span className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-slate-400">
               {count} {count === 1 ? 'entry' : 'entries'}
             </span>
+            {showTypeBreakdown && (Object.keys(byType) as CashBookType[]).map((cbt) => (
+              <span
+                key={cbt}
+                className={`inline-flex items-center rounded px-1 py-0 text-[10px] font-semibold leading-4 ${CASH_BOOK_TYPE_STYLE[cbt].className}`}
+              >
+                {CASH_BOOK_TYPE_STYLE[cbt].label} {formatCurrency(byType[cbt] ?? 0)}
+              </span>
+            ))}
             {verificationStatus === 'verified' && (
               <span className="inline-flex items-center rounded px-1 py-0 text-[10px] font-semibold leading-4 bg-green-100 text-green-700">
                 ✓ Verified
@@ -121,12 +151,13 @@ function LedgerCard({
 // ── Ledger list column ────────────────────────────────────────────────────────
 
 function LedgerColumn({
-  ledgers, type, compareMode, compareSelection, onSelect,
+  ledgers, type, compareMode, compareSelection, showTypeBreakdown, onSelect,
 }: {
   ledgers: LedgerSummary[];
   type: 'Receipt' | 'Payment';
   compareMode: boolean;
   compareSelection: Set<string>;
+  showTypeBreakdown: boolean;
   onSelect: (head: string) => void;
 }) {
   const isReceipt = type === 'Receipt';
@@ -159,13 +190,15 @@ function LedgerColumn({
           </div>
         ) : (
           <div className={`divide-y ${isReceipt ? 'divide-green-100' : 'divide-red-100'}`}>
-            {ledgers.map(({ head, total, count, verificationStatus }) => (
+            {ledgers.map(({ head, total, count, verificationStatus, byType }) => (
               <LedgerCard
                 key={head}
                 head={head} total={total} count={count} type={type}
                 compareMode={compareMode}
                 selectedForCompare={compareSelection.has(head)}
                 verificationStatus={verificationStatus}
+                byType={byType}
+                showTypeBreakdown={showTypeBreakdown}
                 onClick={() => onSelect(head)}
               />
             ))}
@@ -313,16 +346,31 @@ function LedgerTransactionPanel({
 
 // ── Totals cell (shared) ──────────────────────────────────────────────────────
 
-function TotalsCell({ entries, type }: { entries: Entry[]; type: 'Receipt' | 'Payment' }) {
+function TotalsCell({
+  entries, type, showTypeBreakdown = false,
+}: {
+  entries: Entry[]; type: 'Receipt' | 'Payment'; showTypeBreakdown?: boolean;
+}) {
   const isReceipt = type === 'Receipt';
   const total = entries.reduce((s, e) => s + e.amount, 0);
+  const byType = showTypeBreakdown ? sumByCashBookType(entries) : {};
   return (
     <div className={`rounded-b-lg border-x border-b overflow-hidden
       ${isReceipt ? 'border-green-200' : 'border-red-200'}`}
     >
       <div className="border-t-2 border-slate-200 bg-slate-50 flex items-center justify-between px-3 py-1.5">
-        <span className="text-xs font-medium text-slate-500">
-          Total ({entries.length} {entries.length === 1 ? 'entry' : 'entries'})
+        <span className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs font-medium text-slate-500">
+            Total ({entries.length} {entries.length === 1 ? 'entry' : 'entries'})
+          </span>
+          {(Object.keys(byType) as CashBookType[]).map((cbt) => (
+            <span
+              key={cbt}
+              className={`inline-flex items-center rounded px-1 py-0 text-[10px] font-semibold leading-4 ${CASH_BOOK_TYPE_STYLE[cbt].className}`}
+            >
+              {CASH_BOOK_TYPE_STYLE[cbt].label} {formatCurrency(byType[cbt] ?? 0)}
+            </span>
+          ))}
         </span>
         <span className={`text-xs font-bold ${isReceipt ? 'text-green-700' : 'text-red-700'}`}>
           {formatCurrency(total)}
@@ -438,8 +486,8 @@ function LedgerDetail({
           entries={payments} type="Payment" sticky
           statusByEntryId={statusByEntryId} onCycleVerification={onCycleVerification}
         />
-        <TotalsCell entries={receipts} type="Receipt" />
-        <TotalsCell entries={payments} type="Payment" />
+        <TotalsCell entries={receipts} type="Receipt" showTypeBreakdown={cbt === 'Both'} />
+        <TotalsCell entries={payments} type="Payment" showTypeBreakdown={cbt === 'Both'} />
       </div>
     </div>
   );
@@ -660,6 +708,7 @@ export function LedgersPage() {
       .map(([head, d]) => ({
         head, total: d.total, count: d.count,
         verificationStatus: aggregateHeadStatus(d.entries, statusByEntryId),
+        byType: sumByCashBookType(d.entries),
       }))
       .sort((a, b) => a.head.localeCompare(b.head));
 
@@ -878,6 +927,7 @@ export function LedgersPage() {
           type="Receipt"
           compareMode={compareMode}
           compareSelection={compareSelection}
+          showTypeBreakdown={settings.activeCashBookType === 'Both'}
           onSelect={handleCardClick}
         />
         <LedgerColumn
@@ -885,6 +935,7 @@ export function LedgersPage() {
           type="Payment"
           compareMode={compareMode}
           compareSelection={compareSelection}
+          showTypeBreakdown={settings.activeCashBookType === 'Both'}
           onSelect={handleCardClick}
         />
       </div>

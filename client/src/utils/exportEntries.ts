@@ -428,6 +428,77 @@ export function exportLedgerPDF(
   financialYear: string,
   cashBookType: string,
 ) {
+  const sorted = (arr: Entry[]) =>
+    [...arr].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
+  const sortedR = sorted(receipts);
+  const sortedP = sorted(payments);
+
+  const singleSided = (sortedR.length === 0) !== (sortedP.length === 0);
+  const totalR = receipts.reduce((s, e) => s + e.amount, 0);
+  const totalP = payments.reduce((s, e) => s + e.amount, 0);
+  const safeName = head.replace(/[^a-z0-9]/gi, '_');
+
+  if (singleSided) {
+    // Portrait A4: 210mm wide, 10mm margins → 190mm usable width
+    const P_CX = 105;
+    const P_TW = 190;
+    const side = sortedR.length > 0 ? sortedR : sortedP;
+    const prefix = sortedR.length > 0 ? 'R' : 'P';
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text(`Ledger: ${head}`, P_CX, 13, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text(
+      `SMP Cash Book  ·  ${cashBookType}  ·  FY: ${financialYear}  ·  Generated: ${new Date().toLocaleDateString('en-IN')}`,
+      P_CX, 19, { align: 'center' },
+    );
+    doc.setTextColor(0, 0, 0);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body: any[] = side.map((e) => [
+      formatDate(e.date),
+      e.chequeNo || '—',
+      fmtAmt(e.amount),
+      e.notes || '',
+    ]);
+
+    autoTable(doc, {
+      startY:     24,
+      margin:     { left: MARGIN, right: MARGIN },
+      tableWidth: P_TW,
+      head: [[`${prefix}.Date`, `${prefix}.Chq`, `${prefix}.Amount`, `${prefix}.Notes`]],
+      body,
+      styles:     BASE,
+      headStyles: HEAD_S,
+      columnStyles: {
+        0: { cellWidth: 25 },
+        1: { cellWidth: 20 },
+        2: { cellWidth: 30, halign: 'right' },
+        3: { cellWidth: 115, ...NOTES_COL_STYLE },
+      },
+      didParseCell: (data) => {
+        if (data.section === 'body') data.cell.styles.fillColor = C_WHITE;
+      },
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const finalY = (doc as any).lastAutoTable.finalY + 7;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Receipts Total: ${fmtAmt(totalR)}`, MARGIN, finalY);
+    doc.text(`Payments Total: ${fmtAmt(totalP)}`, MARGIN, finalY + 6);
+    doc.text(`Net (R − P): ${fmtAmt(totalR - totalP)}`, MARGIN, finalY + 12);
+
+    doc.save(`ledger-${safeName}-${financialYear.replace('/', '-')}.pdf`);
+    return;
+  }
+
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
   // Header — matches reference ledger PDF style
@@ -445,11 +516,6 @@ export function exportLedgerPDF(
   doc.setTextColor(0, 0, 0);
 
   // Paired rows (receipts left, payments right, indexed)
-  const sorted = (arr: Entry[]) =>
-    [...arr].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
-  const sortedR = sorted(receipts);
-  const sortedP = sorted(payments);
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const body: any[] = [];
   const maxRows = Math.max(sortedR.length, sortedP.length, 1);
@@ -494,15 +560,12 @@ export function exportLedgerPDF(
   // Totals text below table — matches reference style
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const finalY = (doc as any).lastAutoTable.finalY + 7;
-  const totalR = receipts.reduce((s, e) => s + e.amount, 0);
-  const totalP = payments.reduce((s, e) => s + e.amount, 0);
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.text(`Receipts Total: ${fmtAmt(totalR)}`, MARGIN, finalY);
   doc.text(`Payments Total: ${fmtAmt(totalP)}`, MARGIN, finalY + 6);
   doc.text(`Net (R − P): ${fmtAmt(totalR - totalP)}`, MARGIN, finalY + 12);
 
-  const safeName = head.replace(/[^a-z0-9]/gi, '_');
   doc.save(`ledger-${safeName}-${financialYear.replace('/', '-')}.pdf`);
 }
 
