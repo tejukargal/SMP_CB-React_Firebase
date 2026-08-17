@@ -12,6 +12,7 @@ import {
   type AllBankReconciliation,
 } from '@/api/bankReconciliation';
 import { EntrySkeleton } from '@/components/entries/EntrySkeleton';
+import { BankLetterModal } from '@/components/entries/BankLetterModal';
 import { exportBankStatementPDF, exportBankStatementExcel } from '@/utils/exportEntries';
 import type { Entry, BankStatementTxn } from '@smp-cashbook/shared';
 
@@ -746,6 +747,7 @@ export function BankAccountsPage() {
   );
 
   const [selectedKey, setSelectedKey] = useState<BankKey>(BANK_ACCOUNTS[0].key);
+  const [showLetterModal, setShowLetterModal] = useState(false);
   const [openingBalances, setOpeningBalances] = useState<Record<BankKey, number>>({
     sbi_ppl: 0, can_bank_pd: 0, can_bank_scholar: 0,
   });
@@ -862,6 +864,20 @@ export function BankAccountsPage() {
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
+            {/* Bank statement request letter */}
+            <button
+              onClick={() => setShowLetterModal(true)}
+              className="flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5
+                text-xs font-medium text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-colors whitespace-nowrap"
+              title="Generate a bank statement request letter"
+            >
+              <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              Request Letter
+            </button>
+
             {/* Reconcile toggle */}
             <button
               onClick={() => setReconcileMode((m) => !m)}
@@ -902,6 +918,13 @@ export function BankAccountsPage() {
         onSetBankDate={handleSetBankDate}
         reconcileMode={reconcileMode}
       />
+
+      {showLetterModal && (
+        <BankLetterModal
+          initialBankKey={selectedKey}
+          onClose={() => setShowLetterModal(false)}
+        />
+      )}
 
     </div>
   );
