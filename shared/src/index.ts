@@ -1,4 +1,5 @@
 export * from './types/entry';
+export * from './types/budget';
 export * from './types/pendingBill';
 export * from './types/firm';
 export * from './types/settings';

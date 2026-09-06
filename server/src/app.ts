@@ -12,6 +12,9 @@ import bankStatementRoutes from './routes/bankStatementRoutes';
 import pendingBillRoutes from './routes/pendingBillRoutes';
 import clearedBillBatchRoutes from './routes/clearedBillBatchRoutes';
 import firmRoutes from './routes/firmRoutes';
+import budgetHeadRoutes from './routes/budgetHeadRoutes';
+import budgetAllocationRoutes from './routes/budgetAllocationRoutes';
+import budgetExpenseRoutes from './routes/budgetExpenseRoutes';
 
 const app = express();
 
@@ -33,6 +36,9 @@ app.use('/api/bank-statements', authMiddleware, bankStatementRoutes);
 app.use('/api/pending-bills', authMiddleware, pendingBillRoutes);
 app.use('/api/cleared-batches', authMiddleware, clearedBillBatchRoutes);
 app.use('/api/firms', authMiddleware, firmRoutes);
+app.use('/api/budget-heads', authMiddleware, budgetHeadRoutes);
+app.use('/api/budget-allocations', authMiddleware, budgetAllocationRoutes);
+app.use('/api/budget-expenses', authMiddleware, budgetExpenseRoutes);
 
 app.use(errorHandler);
 

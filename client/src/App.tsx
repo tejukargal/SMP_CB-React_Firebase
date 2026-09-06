@@ -6,6 +6,7 @@ import { HomePage } from '@/pages/HomePage';
 import { NewEntryPage } from '@/pages/NewEntryPage';
 import { EntriesPage } from '@/pages/EntriesPage';
 import { LedgersPage } from '@/pages/LedgersPage';
+import { BudgetTrackerPage } from '@/pages/BudgetTrackerPage';
 import { FeeRegisterPage } from '@/pages/FeeRegisterPage';
 import { SalaryRegisterPage } from '@/pages/SalaryRegisterPage';
 import { BankAccountsPage } from '@/pages/BankAccountsPage';
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="new-entry" element={<NewEntryPage />} />
           <Route path="entries" element={<EntriesPage />} />
           <Route path="ledgers" element={<LedgersPage />} />
+          <Route path="budget-tracker" element={<BudgetTrackerPage />} />
           <Route path="fee-register" element={<FeeRegisterPage />} />
           <Route path="salary-register" element={<SalaryRegisterPage />} />
           <Route path="bank-accounts" element={<BankAccountsPage />} />

@@ -48,6 +48,16 @@ const navItems = [
     ),
   },
   {
+    to: '/budget-tracker',
+    label: 'Budget Tracker',
+    icon: (
+      <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M9 7h6m-6 4h6m-6 4h4M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z" />
+      </svg>
+    ),
+  },
+  {
     to: '/bank-accounts',
     label: 'Bank Accounts',
     icon: (
@@ -124,6 +134,7 @@ const FEATURES = [
   'Receipts & Payments',
   'By-Date View',
   'Ledger Accounts',
+  'Budget Tracker',
   'Pending Bills',
   'Pending Bills List',
   'Fee Register',
