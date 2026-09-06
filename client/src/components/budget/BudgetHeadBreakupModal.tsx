@@ -124,7 +124,7 @@ export function BudgetHeadBreakupModal({
             variant="secondary"
             size="sm"
             disabled={expenses.length === 0}
-            onClick={() => exportBudgetHeadBreakupPDF(summary.headName, expenses, { financialYear, cashBookTypeLabel: typeLabel }, showTypeColumn)}
+            onClick={() => exportBudgetHeadBreakupPDF(summary, expenses, { financialYear, cashBookTypeLabel: typeLabel }, showTypeColumn)}
           >
             Export PDF
           </Button>
@@ -133,7 +133,7 @@ export function BudgetHeadBreakupModal({
             variant="secondary"
             size="sm"
             disabled={expenses.length === 0}
-            onClick={() => exportBudgetHeadBreakupExcel(summary.headName, expenses, { financialYear, cashBookTypeLabel: typeLabel }, showTypeColumn)}
+            onClick={() => exportBudgetHeadBreakupExcel(summary, expenses, { financialYear, cashBookTypeLabel: typeLabel }, showTypeColumn)}
           >
             Export Excel
           </Button>

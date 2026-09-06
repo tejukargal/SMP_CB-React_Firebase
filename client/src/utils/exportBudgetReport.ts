@@ -24,18 +24,18 @@ const C_RED:    RGB = [185, 28, 28];
 const C_BLACK:  RGB = [0, 0, 0];
 
 const BASE = {
-  fontSize:      8,
-  cellPadding:   2.5,
+  fontSize:      9.5,
+  cellPadding:   3.5,
   lineColor:     C_BLACK,
   lineWidth:     0.1,
-  minCellHeight: 8,
+  minCellHeight: 10,
 };
 const HEAD_S = {
   fillColor: C_HEAD,
   textColor: C_WHITE,
   fontStyle: 'bold'   as const,
   halign:    'center' as const,
-  fontSize:  9,
+  fontSize:  10.5,
 };
 
 export interface BudgetReportMeta {
@@ -45,14 +45,14 @@ export interface BudgetReportMeta {
 
 function addHeader(doc: jsPDF, meta: BudgetReportMeta, title = 'Budget Tracker Report'): number {
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
+  doc.setFontSize(15);
   doc.text(title, PAGE_CX, 13, { align: 'center' });
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
+  doc.setFontSize(11);
   doc.text(`SMP Cash Book  ·  ${meta.cashBookTypeLabel}`, PAGE_CX, 20, { align: 'center' });
 
-  doc.setFontSize(8);
+  doc.setFontSize(9);
   doc.setTextColor(100, 116, 139);
   doc.text(`FY: ${meta.financialYear}`, MARGIN, 26);
   doc.text(`Generated: ${new Date().toLocaleDateString('en-IN')}`, PAGE_W - MARGIN, 26, { align: 'right' });
@@ -165,15 +165,26 @@ function breakupFilename(headName: string, meta: BudgetReportMeta, ext: 'pdf' | 
 }
 
 export function exportBudgetHeadBreakupPDF(
-  headName: string,
+  summary: BudgetHeadSummary,
   expenses: BudgetExpense[],
   meta: BudgetReportMeta,
   showTypeColumn: boolean
 ): void {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const startY = addHeader(doc, meta, `Budget Head Breakup — ${headName}`);
+  const headerEndY = addHeader(doc, meta, `Budget Head Breakup — ${summary.headName}`);
 
   const totalAmount = expenses.reduce((s, e) => s + e.amount, 0);
+  const remaining = summary.allocatedAmount - totalAmount;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.text(
+    `Allocated: ${fmtAmt(summary.allocatedAmount)}    Spent: ${fmtAmt(totalAmount)}    Remaining: ${fmtAmt(remaining)}    Status: ${statusLabel(summary)}`,
+    MARGIN,
+    headerEndY
+  );
+  doc.setFont('helvetica', 'normal');
+  const startY = headerEndY + 6;
 
   const head = ['Date', 'Notes', ...(showTypeColumn ? ['Type'] : []), 'Linked', 'Amount'];
   const body = expenses.map((e) => [
@@ -188,6 +199,7 @@ export function exportBudgetHeadBreakupPDF(
 
   const amountColIdx = head.length - 1;
   const linkedColIdx = amountColIdx - 1;
+  const dateW = 28; // wide enough for "dd/mm/yyyy" at this font size without ellipsizing
   const notesW = showTypeColumn ? 78 : 100;
 
   autoTable(doc, {
@@ -196,14 +208,14 @@ export function exportBudgetHeadBreakupPDF(
     tableWidth: 190,
     head: [head],
     body,
-    styles: BASE,
+    styles: { ...BASE, overflow: 'ellipsize' as const },
     headStyles: HEAD_S,
     columnStyles: {
-      0: { cellWidth: 22 },
-      1: { cellWidth: notesW },
+      0: { cellWidth: dateW },
+      1: { cellWidth: notesW, overflow: 'linebreak' as const },
       ...(showTypeColumn ? { 2: { cellWidth: 30, halign: 'center' as const } } : {}),
       [linkedColIdx]: { cellWidth: 20, halign: 'center' as const },
-      [amountColIdx]: { cellWidth: 190 - 22 - notesW - (showTypeColumn ? 30 : 0) - 20, halign: 'right' as const },
+      [amountColIdx]: { cellWidth: 190 - dateW - notesW - (showTypeColumn ? 30 : 0) - 20, halign: 'right' as const },
     },
     didParseCell: (data) => {
       if (data.section !== 'body') return;
@@ -214,22 +226,24 @@ export function exportBudgetHeadBreakupPDF(
     },
   });
 
-  doc.save(breakupFilename(headName, meta, 'pdf'));
+  doc.save(breakupFilename(summary.headName, meta, 'pdf'));
 }
 
 export function exportBudgetHeadBreakupExcel(
-  headName: string,
+  summary: BudgetHeadSummary,
   expenses: BudgetExpense[],
   meta: BudgetReportMeta,
   showTypeColumn: boolean
 ): void {
   const totalAmount = expenses.reduce((s, e) => s + e.amount, 0);
+  const remaining = summary.allocatedAmount - totalAmount;
 
   const head = ['Date', 'Notes', ...(showTypeColumn ? ['Cash Book Type'] : []), 'Linked to Entry', 'Amount'];
   const rows: (string | number)[][] = [
-    [`Budget Head Breakup — ${headName}`],
+    [`Budget Head Breakup — ${summary.headName}`],
     [`SMP Cash Book · ${meta.cashBookTypeLabel}`],
     [`FY: ${meta.financialYear} · Generated: ${new Date().toLocaleDateString('en-IN')}`],
+    [`Allocated: ${fmtAmt(summary.allocatedAmount)}  ·  Spent: ${fmtAmt(totalAmount)}  ·  Remaining: ${fmtAmt(remaining)}  ·  Status: ${statusLabel(summary)}`],
     [],
     head,
     ...expenses.map((e) => [
@@ -246,9 +260,10 @@ export function exportBudgetHeadBreakupExcel(
   ws['!cols'] = showTypeColumn
     ? [{ wch: 12 }, { wch: 32 }, { wch: 14 }, { wch: 14 }, { wch: 14 }]
     : [{ wch: 12 }, { wch: 32 }, { wch: 14 }, { wch: 14 }];
+  ws['!rows'] = rows.map(() => ({ hpx: 20 }));
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Breakup');
 
-  XLSX.writeFile(wb, breakupFilename(headName, meta, 'xlsx'));
+  XLSX.writeFile(wb, breakupFilename(summary.headName, meta, 'xlsx'));
 }
