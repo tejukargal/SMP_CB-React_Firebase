@@ -6,13 +6,14 @@ import { SuggestDropdown } from '@/components/ui/SuggestDropdown';
 import { useToast } from '@/context/ToastContext';
 import { usePendingBills } from '@/hooks/usePendingBills';
 import { useFirms } from '@/hooks/useFirms';
-import { apiCreateClearedBillBatch } from '@/api/clearedBillBatches';
+import { apiCreateClearedBillBatch, apiUpdateClearedBillBatch } from '@/api/clearedBillBatches';
 import { apiUpsertFirm } from '@/api/firms';
 import { formatCurrency } from '@/utils/formatCurrency';
+import { formatDate } from '@/utils/formatDate';
 import { PAYMENT_MODE_LABEL } from '@/utils/formatPaymentMode';
 import { exportCashClearingListPDF, exportNonCashClearingListPDF } from '@/utils/exportClearingLists';
 import { toProperCase } from '@smp-cashbook/shared';
-import type { CashBookType, ClearingGroup, FirmBankSnapshot, PaymentMode, PendingBill } from '@smp-cashbook/shared';
+import type { CashBookType, ClearedBillBatch, ClearingGroup, FirmBankSnapshot, PaymentMode, PendingBill } from '@smp-cashbook/shared';
 
 type FirmField = 'accountNo' | 'ifscCode' | 'bankName' | 'branch';
 const FIRM_FIELDS: { key: FirmField; label: string }[] = [
@@ -71,21 +72,36 @@ function buildBankSuggestions(query: string, allBills: PendingBill[]): string[] 
 }
 
 interface ClearBillsModalProps {
-  bills: PendingBill[]; // Approved bills being cleared
+  bills: PendingBill[]; // Approved bills being cleared, or the bills of `editBatch`
   financialYear: string;
   cashBookType: CashBookType;
+  /** When set, the modal edits this already-cleared batch instead of creating a new one. */
+  editBatch?: ClearedBillBatch;
   onClose: () => void;
   onCleared: () => void;
 }
 
-export function ClearBillsModal({ bills, financialYear, cashBookType, onClose, onCleared }: ClearBillsModalProps) {
+export function ClearBillsModal({ bills, financialYear, cashBookType, editBatch, onClose, onCleared }: ClearBillsModalProps) {
   const { addToast } = useToast();
-  const [date, setDate] = useState(todayIso());
+  const isEdit = !!editBatch;
+  const [date, setDate] = useState(editBatch?.date ?? todayIso());
   const [saving, setSaving] = useState(false);
   const [groupByBill, setGroupByBill] = useState<Record<string, ClearingGroup>>(
-    () => Object.fromEntries(bills.map((b) => [b.id, 'NonCash' as ClearingGroup]))
+    () => Object.fromEntries(bills.map((b) => [b.id, editBatch?.group ?? ('NonCash' as ClearingGroup)]))
   );
-  const [lines, setLines] = useState<LineDraft[]>([makeLine()]);
+  const [lines, setLines] = useState<LineDraft[]>(() => {
+    if (!editBatch || editBatch.group === 'Cash') return [makeLine()];
+    // Drop ids of bills that no longer exist so the server treats them as removed
+    const present = new Set(bills.map((b) => b.id));
+    return editBatch.paymentLines.map((l) => ({
+      ...makeLine(),
+      mode: l.mode,
+      bank: l.bank,
+      refNo: l.refNo,
+      billIds: l.billIds.filter((id) => present.has(id)),
+    }));
+  });
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
   const [bankSuggestOpenId, setBankSuggestOpenId] = useState<string | null>(null);
 
   const { bills: historicalBills } = usePendingBills(financialYear, cashBookType);
@@ -93,13 +109,18 @@ export function ClearBillsModal({ bills, financialYear, cashBookType, onClose, o
   // ── Firm bank details (optional, entered inline, upserted to the Firm Directory) ──
   const { firms } = useFirms();
   const firmMap = useMemo(() => new Map(firms.map((f) => [f.firmName, f])), [firms]);
-  const [bankDetailsOpen, setBankDetailsOpen] = useState(false);
+  // When editing, the batch's frozen snapshot (what was printed) takes precedence over the directory
+  const snapshotMap = useMemo(
+    () => new Map((editBatch?.firmBankDetails ?? []).map((f) => [f.firmName, f])),
+    [editBatch]
+  );
+  const [bankDetailsOpen, setBankDetailsOpen] = useState(isEdit);
   const [firmDrafts, setFirmDrafts] = useState<Record<string, Partial<Record<FirmField, string>>>>({});
   const [firmSaving, setFirmSaving] = useState<Record<string, boolean>>({});
   const [firmSavedFlash, setFirmSavedFlash] = useState<Record<string, boolean>>({});
 
   const getFirmField = (name: string, field: FirmField): string =>
-    firmDrafts[name]?.[field] ?? firmMap.get(name)?.[field] ?? '';
+    firmDrafts[name]?.[field] ?? snapshotMap.get(name)?.[field] ?? firmMap.get(name)?.[field] ?? '';
 
   const setFirmField = (name: string, field: FirmField, value: string) =>
     setFirmDrafts((prev) => ({ ...prev, [name]: { ...prev[name], [field]: value } }));
@@ -135,12 +156,17 @@ export function ClearBillsModal({ bills, financialYear, cashBookType, onClose, o
       .filter((f) => f.accountNo || f.ifscCode || f.bankName || f.branch);
   };
 
-  const totalAmount = useMemo(() => bills.reduce((s, b) => s + b.amount, 0), [bills]);
   // Sorted by firm name so the Cash/Non-Cash split and the payment-line bill chips below
   // list bills in the same order, making it easier to cross-check the two sections.
-  const sortedBills = useMemo(() => [...bills].sort((a, b) => a.firmName.localeCompare(b.firmName)), [bills]);
+  const allSortedBills = useMemo(() => [...bills].sort((a, b) => a.firmName.localeCompare(b.firmName)), [bills]);
+  // Bills removed from the batch (edit mode only) are excluded from everything except the step-1 list
+  const sortedBills = useMemo(() => allSortedBills.filter((b) => !removedIds.has(b.id)), [allSortedBills, removedIds]);
+  const totalAmount = useMemo(() => sortedBills.reduce((s, b) => s + b.amount, 0), [sortedBills]);
   const distinctFirmNames = useMemo(() => Array.from(new Set(sortedBills.map((b) => b.firmName))), [sortedBills]);
-  const firmsOnFileCount = useMemo(() => distinctFirmNames.filter((n) => firmMap.has(n)).length, [distinctFirmNames, firmMap]);
+  const firmsOnFileCount = useMemo(
+    () => distinctFirmNames.filter((n) => firmMap.has(n) || snapshotMap.has(n)).length,
+    [distinctFirmNames, firmMap, snapshotMap]
+  );
   const cashBills = useMemo(() => sortedBills.filter((b) => groupByBill[b.id] === 'Cash'), [sortedBills, groupByBill]);
   const nonCashBills = useMemo(() => sortedBills.filter((b) => groupByBill[b.id] !== 'Cash'), [sortedBills, groupByBill]);
   const cashTotal = useMemo(() => cashBills.reduce((s, b) => s + b.amount, 0), [cashBills]);
@@ -195,11 +221,19 @@ export function ClearBillsModal({ bills, financialYear, cashBookType, onClose, o
     setLines((prev) => prev.map((l) => ({ ...l, billIds: l.billIds.filter((id) => id !== billId) })));
   };
 
+  const removeFromBatch = (billId: string) => {
+    if (sortedBills.length <= 1) return;
+    setRemovedIds((prev) => new Set(prev).add(billId));
+    unassignBill(billId);
+  };
+  const undoRemove = (billId: string) =>
+    setRemovedIds((prev) => { const next = new Set(prev); next.delete(billId); return next; });
+
   const linesWithBills = lines.filter((l) => l.billIds.length > 0);
   const nonCashReady = nonCashBills.length === 0 ||
     (unassignedNonCash.length === 0 && linesWithBills.every((l) => l.refNo.trim() !== ''));
 
-  const canConfirm = !!date && bills.length > 0 && (cashBills.length > 0 || nonCashBills.length > 0) && nonCashReady;
+  const canConfirm = !!date && sortedBills.length > 0 && (cashBills.length > 0 || nonCashBills.length > 0) && nonCashReady;
 
   const previewMeta = { financialYear, cashBookType, date };
 
@@ -218,11 +252,23 @@ export function ClearBillsModal({ bills, financialYear, cashBookType, onClose, o
     if (!canConfirm) return;
     setSaving(true);
     try {
+      if (editBatch) {
+        const paymentLines = editBatch.group === 'Cash'
+          ? [{ mode: 'Cash' as PaymentMode, bank: '', refNo: '', billIds: cashBills.map((b) => b.id) }]
+          : linesWithBills.map((l) => ({ mode: l.mode, bank: l.bank.trim(), refNo: l.refNo.trim(), billIds: l.billIds }));
+        await apiUpdateClearedBillBatch(editBatch.id, editBatch.financialYear, editBatch.cashBookType, {
+          date, paymentLines, firmBankDetails: buildFirmSnapshots(sortedBills),
+        });
+        addToast('Cleared batch updated', 'success');
+        onCleared();
+        return;
+      }
       if (cashBills.length > 0) {
         await apiCreateClearedBillBatch({
           group: 'Cash',
           paymentLines: [{ mode: 'Cash', bank: '', refNo: '', billIds: cashBills.map((b) => b.id) }],
           date, financialYear, cashBookType,
+          firmBankDetails: buildFirmSnapshots(cashBills),
         });
       }
       if (nonCashBills.length > 0) {
@@ -230,12 +276,13 @@ export function ClearBillsModal({ bills, financialYear, cashBookType, onClose, o
           group: 'NonCash',
           paymentLines: linesWithBills.map((l) => ({ mode: l.mode, bank: l.bank.trim(), refNo: l.refNo.trim(), billIds: l.billIds })),
           date, financialYear, cashBookType,
+          firmBankDetails: buildFirmSnapshots(nonCashBills),
         });
       }
       addToast('Bills cleared successfully', 'success');
       onCleared();
     } catch (err: unknown) {
-      addToast(err instanceof Error ? err.message : 'Failed to clear bills', 'error');
+      addToast(err instanceof Error ? err.message : (isEdit ? 'Failed to update batch' : 'Failed to clear bills'), 'error');
     } finally {
       setSaving(false);
     }
@@ -254,7 +301,9 @@ export function ClearBillsModal({ bills, financialYear, cashBookType, onClose, o
         <div className="flex items-center justify-between rounded-t-xl border-b border-slate-100 bg-slate-50 px-5 py-4 shrink-0">
           <div>
             <h2 className="text-sm font-semibold text-slate-800">
-              Clear {bills.length} {bills.length === 1 ? 'bill' : 'bills'}
+              {editBatch
+                ? `Edit cleared batch · ${formatDate(editBatch.date)}`
+                : `Clear ${bills.length} ${bills.length === 1 ? 'bill' : 'bills'}`}
             </h2>
             <p className="mt-0.5 text-xs text-slate-500">
               Total <span className="font-medium text-slate-700">{formatCurrency(totalAmount)}</span>
@@ -275,28 +324,61 @@ export function ClearBillsModal({ bills, financialYear, cashBookType, onClose, o
           {/* Step 1: Split */}
           <div className="rounded-lg border border-slate-200 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100 bg-slate-50">
-              <span className="text-xs font-semibold text-slate-600">1. Separate Cash from Non-Cash</span>
-              <div className="flex gap-1.5">
-                <button type="button" onClick={() => markAll('Cash')} className="text-xs font-medium text-emerald-600 hover:underline">
-                  Mark all Cash
-                </button>
-                <span className="text-slate-300">·</span>
-                <button type="button" onClick={() => markAll('NonCash')} className="text-xs font-medium text-blue-600 hover:underline">
-                  Mark all Non-Cash
-                </button>
-              </div>
+              {editBatch ? (
+                <>
+                  <span className="text-xs font-semibold text-slate-600">1. Bills in this batch</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                    editBatch.group === 'Cash' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
+                  }`}>
+                    {editBatch.group === 'Cash' ? 'Cash' : 'Non-Cash'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="text-xs font-semibold text-slate-600">1. Separate Cash from Non-Cash</span>
+                  <div className="flex gap-1.5">
+                    <button type="button" onClick={() => markAll('Cash')} className="text-xs font-medium text-emerald-600 hover:underline">
+                      Mark all Cash
+                    </button>
+                    <span className="text-slate-300">·</span>
+                    <button type="button" onClick={() => markAll('NonCash')} className="text-xs font-medium text-blue-600 hover:underline">
+                      Mark all Non-Cash
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
             <div className="divide-y divide-slate-100 max-h-52 overflow-y-auto">
-              {sortedBills.map((b) => {
+              {allSortedBills.map((b) => {
                 const isCash = groupByBill[b.id] === 'Cash';
+                const removed = removedIds.has(b.id);
                 return (
                   <div key={b.id} className="flex items-center justify-between gap-3 px-4 py-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-700">
+                    <div className={`min-w-0 ${removed ? 'opacity-50' : ''}`}>
+                      <p className={`truncate text-sm font-medium text-slate-700 ${removed ? 'line-through' : ''}`}>
                         {b.firmName} <span className="font-normal text-slate-400">· {b.billNumber}</span>
                       </p>
-                      <p className="text-xs text-slate-400">{formatCurrency(b.amount)}</p>
+                      <p className="text-xs text-slate-400">
+                        {formatCurrency(b.amount)}
+                        {removed && <span className="ml-1.5 text-amber-600 no-underline">· will revert to Approved</span>}
+                      </p>
                     </div>
+                    {editBatch ? (
+                      removed ? (
+                        <button type="button" onClick={() => undoRemove(b.id)}
+                          className="shrink-0 text-xs font-medium text-blue-600 hover:underline">
+                          Undo
+                        </button>
+                      ) : (
+                        <button type="button" onClick={() => removeFromBatch(b.id)}
+                          disabled={sortedBills.length <= 1}
+                          title={sortedBills.length <= 1 ? 'A batch needs at least one bill — use Delete batch instead' : 'Remove this bill from the batch'}
+                          className="shrink-0 rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-500
+                            hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                          Remove from batch
+                        </button>
+                      )
+                    ) : (
                     <div className="flex shrink-0 overflow-hidden rounded-md border border-slate-200">
                       <button type="button" onClick={() => setBillGroup(b.id, 'Cash')}
                         className={chipCls(isCash, 'bg-emerald-100 text-emerald-700')}>
@@ -307,6 +389,7 @@ export function ClearBillsModal({ bills, financialYear, cashBookType, onClose, o
                         Non-Cash
                       </button>
                     </div>
+                    )}
                   </div>
                 );
               })}
@@ -501,8 +584,10 @@ export function ClearBillsModal({ bills, financialYear, cashBookType, onClose, o
             )}
           </div>
           <p className="text-xs text-slate-400 leading-relaxed">
-            Printing does not clear the bills — take the printed list(s) for Principal attestation and disbursement first,
-            then come back and confirm clearance below once done.
+            {isEdit
+              ? 'Changes apply to the batch and its bills once saved. Bills removed here go back to Approved.'
+              : 'Printing does not clear the bills — take the printed list(s) for Principal attestation and disbursement first, '
+                + 'then come back and confirm clearance below once done.'}
           </p>
 
         </div>
@@ -520,7 +605,7 @@ export function ClearBillsModal({ bills, financialYear, cashBookType, onClose, o
               Cancel
             </button>
             <Button size="sm" onClick={handleConfirm} loading={saving} disabled={!canConfirm}>
-              Confirm Clearance
+              {isEdit ? 'Save Changes' : 'Confirm Clearance'}
             </Button>
           </div>
         </div>

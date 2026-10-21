@@ -23,6 +23,7 @@ function mapDoc(doc: any, fallbackCashBookType: CashBookType, fallbackFY: string
     cashBookType:  (data.cashBookType ?? fallbackCashBookType) as CashBookType,
     createdAt:     data.createdAt?.toDate().toISOString() ?? '',
     firmBankDetails: data.firmBankDetails as FirmBankSnapshot[] | undefined,
+    updatedAt:     data.updatedAt?.toDate().toISOString(),
   };
 }
 

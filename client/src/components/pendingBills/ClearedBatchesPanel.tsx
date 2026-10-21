@@ -6,6 +6,7 @@ import { formatCurrency } from '@/utils/formatCurrency';
 import { formatDate } from '@/utils/formatDate';
 import { PAYMENT_MODE_LABEL } from '@/utils/formatPaymentMode';
 import { exportCashClearingListPDF, exportNonCashClearingListPDF } from '@/utils/exportClearingLists';
+import { ClearBillsModal } from './ClearBillsModal';
 import type { PendingBill, ClearedBillBatch } from '@smp-cashbook/shared';
 import type { ActiveCashBookType } from '@smp-cashbook/shared';
 
@@ -80,6 +81,7 @@ export function ClearedBatchesPanel({ bills, financialYear, cashBookType }: Clea
   const { batches, loading, error } = useClearedBillBatches(financialYear, cashBookType);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [batchToDelete, setBatchToDelete] = useState<ClearedBillBatch | null>(null);
+  const [batchToEdit, setBatchToEdit] = useState<ClearedBillBatch | null>(null);
   const [deleting, setDeleting] = useState(false);
   const { addToast } = useToast();
   const billsById = new Map(bills.map((b) => [b.id, b]));
@@ -98,10 +100,12 @@ export function ClearedBatchesPanel({ bills, financialYear, cashBookType }: Clea
     }
   };
 
+  const getBatchBills = (batch: ClearedBillBatch) => batch.billIds
+    .map((id) => billsById.get(id))
+    .filter((b): b is PendingBill => !!b);
+
   const handlePrintBatch = (batch: ClearedBillBatch) => {
-    const batchBills = batch.billIds
-      .map((id) => billsById.get(id))
-      .filter((b): b is PendingBill => !!b);
+    const batchBills = getBatchBills(batch);
     const meta = { financialYear: batch.financialYear, cashBookType: batch.cashBookType, date: batch.date };
     if (batch.group === 'Cash') {
       exportCashClearingListPDF(batchBills, meta, batch.firmBankDetails ?? []);
@@ -145,6 +149,12 @@ export function ClearedBatchesPanel({ bills, financialYear, cashBookType }: Clea
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
                       {batch.count} {batch.count === 1 ? 'bill' : 'bills'}
                     </span>
+                    {batch.updatedAt && (
+                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700 ring-1 ring-amber-200"
+                        title={`Edited ${new Date(batch.updatedAt).toLocaleString('en-IN')}`}>
+                        Edited
+                      </span>
+                    )}
                   </button>
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-bold text-green-700">{formatCurrency(batch.totalAmount)}</span>
@@ -157,6 +167,17 @@ export function ClearedBatchesPanel({ bills, financialYear, cashBookType }: Clea
                       <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                           d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.111 48.111 0 00-3.413-.387m-7.5 0V5.25A2.25 2.25 0 019 3h6a2.25 2.25 0 012.25 2.25v1.643M15 5.25a2.25 2.25 0 00-2.25-2.25h-1.5A2.25 2.25 0 009 5.25v1.643" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBatchToEdit(batch)}
+                      title="Edit this batch"
+                      className="rounded-md p-1.5 text-slate-400 hover:bg-amber-50 hover:text-amber-600 transition-colors"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
                     </button>
                     <button
@@ -249,6 +270,18 @@ export function ClearedBatchesPanel({ bills, financialYear, cashBookType }: Clea
           onConfirm={handleDeleteBatch}
           onCancel={() => setBatchToDelete(null)}
           deleting={deleting}
+        />
+      )}
+
+      {batchToEdit && (
+        <ClearBillsModal
+          key={batchToEdit.id}
+          editBatch={batchToEdit}
+          bills={getBatchBills(batchToEdit)}
+          financialYear={batchToEdit.financialYear}
+          cashBookType={batchToEdit.cashBookType}
+          onClose={() => setBatchToEdit(null)}
+          onCleared={() => setBatchToEdit(null)}
         />
       )}
     </div>

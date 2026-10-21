@@ -84,6 +84,7 @@ export interface ClearedBillBatch {
   createdAt: string; // ISO timestamp
   /** Frozen snapshot of each distinct firm's bank details at clearance time, if on file. */
   firmBankDetails?: FirmBankSnapshot[];
+  updatedAt?: string; // ISO timestamp, set when the batch is edited after clearance
 }
 
 export interface CreateClearedBillBatchPayload {
@@ -92,4 +93,12 @@ export interface CreateClearedBillBatchPayload {
   date: string;
   financialYear: string;
   cashBookType: CashBookType;
+  /** Snapshot as printed by the client; when omitted the server reads the Firm Directory. */
+  firmBankDetails?: FirmBankSnapshot[];
+}
+
+export interface UpdateClearedBillBatchPayload {
+  date: string;
+  paymentLines: { mode: PaymentMode; bank: string; refNo: string; billIds: string[] }[];
+  firmBankDetails: FirmBankSnapshot[];
 }

@@ -3,12 +3,28 @@ import {
   createClearedBillBatch,
   getClearedBillBatches,
   deleteClearedBillBatch,
+  updateClearedBillBatch,
+  ClearedBatchNotFoundError,
   InvalidBillsForClearingError,
   InvalidPaymentLinesError,
 } from '../services/clearedBillBatchService';
-import type { CreateClearedBillBatchPayload } from '@smp-cashbook/shared';
+import type { CreateClearedBillBatchPayload, UpdateClearedBillBatchPayload } from '@smp-cashbook/shared';
 
 const PAYMENT_MODES = ['Cash', 'Cheque', 'AcctPayeeCheque', 'NEFT', 'Online'];
+
+/** Returns an error message for an invalid paymentLines array, or null if it is well-formed. */
+function paymentLinesError(lines: unknown): string | null {
+  if (!Array.isArray(lines) || lines.length === 0) return 'paymentLines must be a non-empty array';
+  for (const line of lines as CreateClearedBillBatchPayload['paymentLines']) {
+    if (!line.mode || !PAYMENT_MODES.includes(line.mode)) return `invalid payment mode: ${line.mode}`;
+    if (!Array.isArray(line.billIds) || line.billIds.length === 0) return 'each payment line requires at least one bill';
+  }
+  return null;
+}
+
+function normalizeLines(lines: CreateClearedBillBatchPayload['paymentLines']) {
+  return lines.map((line) => ({ mode: line.mode, bank: line.bank ?? '', refNo: line.refNo ?? '', billIds: line.billIds }));
+}
 
 export async function handleCreateClearedBillBatch(
   req: Request,
@@ -21,33 +37,64 @@ export async function handleCreateClearedBillBatch(
     if (!body.group || !['Cash', 'NonCash'].includes(body.group)) {
       res.status(400).json({ error: 'group must be Cash or NonCash' }); return;
     }
-    if (!Array.isArray(body.paymentLines) || body.paymentLines.length === 0) {
-      res.status(400).json({ error: 'paymentLines must be a non-empty array' }); return;
-    }
-    for (const line of body.paymentLines) {
-      if (!line.mode || !PAYMENT_MODES.includes(line.mode)) {
-        res.status(400).json({ error: `invalid payment mode: ${line.mode}` }); return;
-      }
-      if (!Array.isArray(line.billIds) || line.billIds.length === 0) {
-        res.status(400).json({ error: 'each payment line requires at least one bill' }); return;
-      }
-    }
+    const linesErr = paymentLinesError(body.paymentLines);
+    if (linesErr) { res.status(400).json({ error: linesErr }); return; }
     if (!body.date) { res.status(400).json({ error: 'date is required' }); return; }
     if (!body.financialYear) { res.status(400).json({ error: 'financialYear is required' }); return; }
     if (!body.cashBookType || !['Aided', 'Un-Aided', 'WP Un-Aided'].includes(body.cashBookType)) {
       res.status(400).json({ error: 'cashBookType must be Aided, Un-Aided, or WP Un-Aided' }); return;
+    }
+    if (body.firmBankDetails !== undefined && !Array.isArray(body.firmBankDetails)) {
+      res.status(400).json({ error: 'firmBankDetails must be an array' }); return;
     }
 
     const batch = await createClearedBillBatch(
       body.financialYear,
       body.cashBookType,
       body.group,
-      body.paymentLines.map((line) => ({ mode: line.mode, bank: line.bank ?? '', refNo: line.refNo ?? '', billIds: line.billIds })),
-      body.date
+      normalizeLines(body.paymentLines!),
+      body.date,
+      body.firmBankDetails
     );
     res.status(201).json({ data: batch, message: 'Bills cleared' });
   } catch (err) {
     if (err instanceof InvalidBillsForClearingError || err instanceof InvalidPaymentLinesError) {
+      res.status(400).json({ error: err.message }); return;
+    }
+    next(err);
+  }
+}
+
+export async function handleUpdateClearedBillBatch(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const id = req.params['id'] as string;
+    const fy = req.query['fy'] as string | undefined;
+    const type = req.query['type'] as string | undefined;
+    if (!fy || !type) {
+      res.status(400).json({ error: 'fy and type query params are required' });
+      return;
+    }
+    const body = req.body as Partial<UpdateClearedBillBatchPayload>;
+    const linesErr = paymentLinesError(body.paymentLines);
+    if (linesErr) { res.status(400).json({ error: linesErr }); return; }
+    if (!body.date) { res.status(400).json({ error: 'date is required' }); return; }
+    if (!Array.isArray(body.firmBankDetails)) {
+      res.status(400).json({ error: 'firmBankDetails must be an array' }); return;
+    }
+
+    const batch = await updateClearedBillBatch(
+      fy, type, id, normalizeLines(body.paymentLines!), body.date, body.firmBankDetails
+    );
+    res.json({ data: batch, message: 'Cleared batch updated' });
+  } catch (err) {
+    if (err instanceof ClearedBatchNotFoundError) {
+      res.status(404).json({ error: err.message }); return;
+    }
+    if (err instanceof InvalidPaymentLinesError) {
       res.status(400).json({ error: err.message }); return;
     }
     next(err);
