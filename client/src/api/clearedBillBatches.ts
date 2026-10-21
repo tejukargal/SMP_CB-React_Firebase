@@ -19,7 +19,7 @@ export async function apiUpdateClearedBillBatch(
   type: string,
   payload: UpdateClearedBillBatchPayload
 ): Promise<ClearedBillBatch> {
-  const res = await apiClient.put<ApiResponse<ClearedBillBatch>>(`/api/cleared-batches/${id}`, payload, {
+  const res = await apiClient.patch<ApiResponse<ClearedBillBatch>>(`/api/cleared-batches/${id}`, payload, {
     params: { fy, type },
   });
   return res.data.data;

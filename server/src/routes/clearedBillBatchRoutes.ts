@@ -10,7 +10,7 @@ const router = Router();
 
 router.post('/', handleCreateClearedBillBatch);
 router.get('/', handleGetClearedBillBatches);
-router.put('/:id', handleUpdateClearedBillBatch);
+router.patch('/:id', handleUpdateClearedBillBatch);
 router.delete('/:id', handleDeleteClearedBillBatch);
 
 export default router;
